@@ -3,11 +3,25 @@
 Run locally:
     cd backend && uvicorn app.main:app --reload
 """
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import health
+from app.api.routes import health, players, sync
 from app.core.config import settings
+from app.services.scheduler import scheduler
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Starts the periodic Sportradar sync only when it is fully configured and
+    # enabled; otherwise this is a no-op and the app serves existing data.
+    scheduler.start()
+    try:
+        yield
+    finally:
+        await scheduler.stop()
 
 
 def create_app() -> FastAPI:
@@ -15,6 +29,7 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         version="0.1.0",
         description="Backend API for Hoop Archive — NBA historical & current player analytics.",
+        lifespan=lifespan,
     )
 
     # The Flutter client may run from a device/emulator; CORS is permissive in
@@ -27,6 +42,8 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(health.router)
+    app.include_router(players.router)
+    app.include_router(sync.router)
     return app
 
 

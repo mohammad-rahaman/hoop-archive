@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/models.dart';
 import '../../core/theme.dart';
+import '../../core/widgets/offline_banner.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -13,24 +15,49 @@ class HomeScreen extends ConsumerWidget {
     final meta = ref.watch(metaProvider);
     return Scaffold(
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () => ref.refresh(metaProvider.future),
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-            children: [
-              const _Header(),
-              const SizedBox(height: 20),
-              meta.when(
-                loading: () => const _OverviewLoading(),
-                error: (err, _) => _OverviewError(
-                  onRetry: () => ref.invalidate(metaProvider),
+        child: Column(
+          children: [
+            const OfflineBanner(),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () => ref.refresh(metaProvider.future),
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+                  children: [
+                    const _Header(),
+                    const SizedBox(height: 20),
+                    meta.when(
+                      loading: () => const _OverviewLoading(),
+                      error: (err, _) => _OverviewError(
+                        onRetry: () => ref.invalidate(metaProvider),
+                      ),
+                      data: (m) => _Overview(meta: m),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () => context.push('/players'),
+                        icon: const Icon(Icons.search),
+                        label: const Text('Browse players'),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => context.push('/compare'),
+                        icon: const Icon(Icons.compare_arrows_rounded),
+                        label: const Text('Compare players'),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    const _Roadmap(),
+                  ],
                 ),
-                data: (m) => _Overview(meta: m),
               ),
-              const SizedBox(height: 24),
-              const _Roadmap(),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -96,9 +123,12 @@ class _Overview extends StatelessWidget {
           children: [
             Icon(Icons.check_circle, size: 16, color: t.colorScheme.secondary),
             const SizedBox(width: 6),
-            Text('Connected to backend',
-                style: t.textTheme.labelMedium
-                    ?.copyWith(color: t.colorScheme.secondary)),
+            Text(
+              'Connected to backend',
+              style: t.textTheme.labelMedium?.copyWith(
+                color: t.colorScheme.secondary,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 12),
@@ -123,9 +153,13 @@ class _Overview extends StatelessWidget {
           children: [
             _SourceChip(
               icon: Icons.storage_rounded,
-              label: meta.lastSync?.provider == 'kaggle_csv'
-                  ? 'Historical dataset'
-                  : (meta.lastSync?.provider ?? 'No data yet'),
+              label: meta.lastSync == null
+                  ? 'No data yet'
+                  : [
+                      meta.lastSync!.providerLabel,
+                      if (meta.lastSync!.updatedLabel != null)
+                        meta.lastSync!.updatedLabel!,
+                    ].join(' · '),
             ),
             _SourceChip(
               icon: meta.sportradarConfigured
@@ -137,6 +171,16 @@ class _Overview extends StatelessWidget {
             ),
           ],
         ),
+        if (!meta.sportradarConfigured) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Showing historical data. Add a Sportradar key on the backend to '
+            'enable current-season sync.',
+            style: t.textTheme.bodySmall?.copyWith(
+              color: t.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -157,15 +201,20 @@ class _StatTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(value,
-                style: t.textTheme.headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.w800)),
+            Text(
+              value,
+              style: t.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
             const SizedBox(height: 2),
-            Text(label.toUpperCase(),
-                style: t.textTheme.labelSmall?.copyWith(
-                  color: t.colorScheme.onSurfaceVariant,
-                  letterSpacing: 0.6,
-                )),
+            Text(
+              label.toUpperCase(),
+              style: t.textTheme.labelSmall?.copyWith(
+                color: t.colorScheme.onSurfaceVariant,
+                letterSpacing: 0.6,
+              ),
+            ),
           ],
         ),
       ),
@@ -245,19 +294,26 @@ class _OverviewError extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            Icon(Icons.wifi_off_rounded,
-                size: 36, color: t.colorScheme.onSurfaceVariant),
+            Icon(
+              Icons.wifi_off_rounded,
+              size: 36,
+              color: t.colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(height: 12),
-            Text("Can't reach the server",
-                style: t.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700)),
+            Text(
+              "Can't reach the server",
+              style: t.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
             const SizedBox(height: 6),
             Text(
               'Start the backend (uvicorn app.main:app) and make sure the API '
               'URL is reachable from this device, then retry.',
               textAlign: TextAlign.center,
-              style: t.textTheme.bodySmall
-                  ?.copyWith(color: t.colorScheme.onSurfaceVariant),
+              style: t.textTheme.bodySmall?.copyWith(
+                color: t.colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 16),
             FilledButton.icon(
@@ -280,17 +336,18 @@ class _Roadmap extends StatelessWidget {
     final t = Theme.of(context);
     const items = [
       ('Player search & filters', true),
-      ('Player profiles & season stats', false),
-      ('Performance trend charts', false),
-      ('Side-by-side comparison', false),
-      ('Offline access', false),
+      ('Player profiles & season stats', true),
+      ('Performance trend charts', true),
+      ('Side-by-side comparison', true),
+      ('Offline access', true),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Features',
-            style:
-                t.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        Text(
+          'Features',
+          style: t.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+        ),
         const SizedBox(height: 10),
         Card(
           child: Column(

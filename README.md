@@ -6,8 +6,28 @@ side-by-side — across historical seasons from **1980** to today, with offline
 access to anything you've already viewed.
 
 > Portfolio project demonstrating Flutter, FastAPI, PostgreSQL, data
-> engineering (ETL), API integration, data visualization, and offline-first
-> architecture.
+> engineering (ETL), third-party API integration, data visualization, and
+> offline-first architecture.
+
+---
+
+## Features
+
+- **Browse & search** players with debounced search and team / position
+  filters, infinite-scroll pagination.
+- **Player profiles** with full season-by-season stat tables, a regular-season
+  / playoffs toggle, and multi-team seasons shown alongside the league `TOT`
+  aggregate.
+- **Trend charts** (`fl_chart`) of scoring and efficiency across a career, with
+  missing seasons skipped rather than drawn as zero.
+- **Side-by-side comparison** of two players on career averages, with per-metric
+  leader highlighting and an honest "not comparable" state for metrics one
+  player is missing (never scored as 0).
+- **Current-season sync** from Sportradar through a swappable provider, behind a
+  dependency-free scheduled background job that is **off unless configured**.
+- **Offline access** — every response you load is cached locally, so players,
+  profiles, comparisons and the overview replay from disk when the network is
+  unavailable, with an offline banner and a "saved copy" freshness note.
 
 ---
 
@@ -18,24 +38,32 @@ Hoop Archive/
 ├── backend/                 FastAPI + PostgreSQL + Alembic
 │   ├── app/
 │   │   ├── core/            config (env-driven; API keys stay server-side)
-│   │   ├── db/              SQLAlchemy models, engine/session
-│   │   ├── api/routes/      HTTP endpoints
-│   │   ├── services/        comparison logic, provider abstraction
-│   │   │   └── providers/   StatsProvider interface (Sportradar impl → Phase 7)
+│   │   ├── db/              SQLAlchemy 2.0 models, engine/session
+│   │   ├── api/routes/      HTTP endpoints (health, players, sync)
+│   │   ├── schemas/         Pydantic v2 request/response models
+│   │   ├── services/        player queries, career aggregation, comparison,
+│   │   │   │                sync + scheduler
+│   │   │   └── providers/   StatsProvider interface
+│   │   ├── providers/       Sportradar client (key read server-side only)
 │   │   └── etl/             CSV inspection, validation & idempotent ingestion
 │   ├── alembic/             migrations
-│   ├── data/sample/         synthetic sample CSV (NOT real Kaggle data)
-│   └── tests/               pytest (ETL, validation, comparison)
+│   ├── data/sample/         synthetic sample CSV + sample Sportradar JSON
+│   └── tests/               pytest (ETL, comparison, APIs, sync, scheduler)
 └── mobile/                  Flutter app
     └── lib/
-        ├── core/            env, theme, router, Dio API client, DTOs
-        └── features/        feature screens (home/overview today)
+        ├── core/
+        │   ├── api/         Dio client (cache-aware) + DTOs
+        │   ├── cache/       KeyValueStore + ResponseCache (offline)
+        │   ├── widgets/     shared UI (offline banner)
+        │   └── …            env, theme, router, connectivity
+        └── features/        home, players (list/profile/trends), compare
 ```
 
 **Data flow:** Kaggle historical CSV → ETL (validate + idempotent upsert) →
-PostgreSQL → FastAPI → Flutter (with a local SQLite/Drift cache for offline,
-added in Phase 8). Current/recent data is fetched server-side from Sportradar
-through a swappable `StatsProvider` abstraction.
+PostgreSQL → FastAPI → Flutter. The Flutter client caches every response in a
+local document cache (write-through on success, read-through on failure) for
+offline access. Current/recent data is fetched **server-side** from Sportradar
+through a swappable `StatsProvider` abstraction and merged into the same tables.
 
 ### Data model
 `Player` · `Team` · `Season` · `PlayerSeasonStats` · `SyncMetadata`
@@ -47,6 +75,15 @@ through a swappable `StatsProvider` abstraction.
   coexist.
 - Regular season and playoffs are kept **distinct** (`season_type`).
 - Missing statistics are stored as `NULL`, **never 0**.
+
+### Offline cache (mobile)
+The client uses a document cache (keyed JSON responses) rather than a relational
+store, because the access pattern is "replay the last response for this
+request", not relational querying. It lives behind a `KeyValueStore` interface
+(`SharedPreferences` in the app, in-memory in tests), so a heavier engine
+(e.g. Drift/SQLite) can be dropped in later without touching call sites. Entries
+never hard-expire — stale data is still shown offline — but are labelled by age
+and bounded with oldest-first eviction.
 
 ---
 
@@ -78,20 +115,43 @@ The ingester maps CSV headers flexibly (case/punctuation-insensitive aliases),
 reports unmapped/missing columns, and refuses to run if required fields
 (`player_name`, `season`) are absent.
 
-### API endpoints (current)
-| Method | Path      | Description |
-|--------|-----------|-------------|
-| GET    | `/health` | Liveness check |
-| GET    | `/meta`   | Row counts, season range, last sync, Sportradar status |
+### Current-season sync (Sportradar)
 
-More endpoints (player list/search/filter, profile, comparison) arrive in
-Phases 3–6.
+Sync is **disabled by default** and makes no external calls until fully
+configured. Set the following in `.env` to enable it:
+
+```bash
+SPORTRADAR_API_KEY=...        # read server-side only; never sent to the client
+SYNC_ENABLED=true
+SYNC_SEASON_YEAR=2024
+SYNC_TEAM_IDS=sr:team:...     # comma-separated
+SYNC_INTERVAL_HOURS=24
+SYNC_ADMIN_TOKEN=...          # guards the manual trigger endpoint
+```
+
+With those set, a background scheduler refreshes the configured teams on an
+interval. A manual run is available at `POST /sync/sportradar` (requires the
+`X-Sync-Token` header when `SYNC_ADMIN_TOKEN` is set). When unconfigured, a sync
+records a `skipped` run and the app keeps serving historical data.
+
+### API endpoints
+| Method | Path | Description |
+|--------|------|-------------|
+| GET  | `/health` | Liveness check |
+| GET  | `/meta` | Row counts, season range, last sync, Sportradar status |
+| GET  | `/players` | List / search / filter players (paginated) |
+| GET  | `/players/filters` | Available team & position filter values |
+| GET  | `/players/compare` | Compare two players (`a`, `b`, `season_type`) |
+| GET  | `/players/{id}` | Player profile + season statistics |
+| GET  | `/sync/status` | Sync configuration & recent runs (no key leaked) |
+| POST | `/sync/sportradar` | Trigger a Sportradar sync (token-guarded) |
 
 ### Tests
 ```bash
-cd backend && PYTHONPATH=. python3 -m pytest -q
+cd backend && PYTHONPATH=. python3 -m pytest -q   # 55 tests
 ```
-Tests run on in-memory SQLite — no running Postgres required.
+Tests run on in-memory SQLite — no running Postgres required, and no external
+network calls (the Sportradar client is exercised with a mock transport).
 
 ---
 
@@ -102,12 +162,19 @@ Requirements: Flutter 3.24+.
 ```bash
 cd mobile
 flutter pub get
-flutter run                                   # iOS simulator / localhost
+flutter run                                                   # iOS sim / localhost
 flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000   # Android emulator
 ```
 The Android emulator reaches the host machine via `10.0.2.2`; the iOS simulator
 uses `localhost`. Override with `--dart-define=API_BASE_URL=...` for a physical
 device on your LAN.
+
+```bash
+flutter test       # 24 tests
+flutter analyze    # no issues
+```
+
+See [`mobile/README.md`](mobile/README.md) for the app's internal structure.
 
 ---
 
@@ -117,7 +184,8 @@ device on your LAN.
   development. Its license is **not assumed** to permit public redistribution,
   so no real Kaggle data is committed to this repository. Place your CSV under
   `backend/data/` (git-ignored) and point the ingester at it.
-- `backend/data/sample/sample_nba_synthetic.csv` is **synthetic, fabricated
+- `backend/data/sample/sample_nba_synthetic.csv` and
+  `sportradar_seasonal_statistics_sample.json` are **synthetic, fabricated
   data** created solely to exercise the pipeline and tests — the players are not
   real.
 - **Sportradar** trial data is for internal evaluation only and is not
@@ -132,10 +200,10 @@ device on your LAN.
 |------:|-------|--------|
 | 1 | Repo audit + architecture scaffold (both tiers) | ✅ Done |
 | 2 | PostgreSQL schema, migrations, idempotent CSV ingestion | ✅ Done |
-| 3 | Player list, search, team/position filters, pagination | ⏭ Next |
-| 4 | Player profile & season statistics | — |
-| 5 | Trend charts (fl_chart) | — |
-| 6 | Player comparison (leader highlighting) | — |
-| 7 | Sportradar integration & scheduled sync | — |
-| 8 | Offline caching (Drift/SQLite) | — |
-| 9 | Testing, UI polish, docs | — |
+| 3 | Player list, search, team/position filters, pagination | ✅ Done |
+| 4 | Player profile & season statistics | ✅ Done |
+| 5 | Trend charts (fl_chart) | ✅ Done |
+| 6 | Player comparison (leader highlighting) | ✅ Done |
+| 7 | Sportradar integration & scheduled sync | ✅ Done |
+| 8 | Offline caching (document cache, swappable store) | ✅ Done |
+| 9 | Testing, UI polish, docs | ✅ Done |
