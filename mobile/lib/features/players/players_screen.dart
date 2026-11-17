@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/models.dart';
 import '../../core/widgets/offline_banner.dart';
+import '../../core/widgets/player_avatar.dart';
 import 'players_controller.dart';
 
 class PlayersScreen extends ConsumerStatefulWidget {
@@ -349,16 +350,10 @@ class _PlayerCard extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           child: Row(
             children: [
-              CircleAvatar(
+              PlayerAvatar(
+                imageUrl: player.imageUrl,
+                initials: player.initials,
                 radius: 24,
-                backgroundColor: t.colorScheme.primary.withValues(alpha: 0.15),
-                child: Text(
-                  player.initials,
-                  style: t.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: t.colorScheme.primary,
-                  ),
-                ),
               ),
               const SizedBox(width: 14),
               Expanded(

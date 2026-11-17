@@ -10,6 +10,9 @@ backend/.env
 backend/data/raw/
 backend/data/*.csv
 !backend/data/sample/*.csv
+# Kaggle source dataset kept at the repo root — license unverified, never commit.
+/cleaned_data.csv
+/*.csv
 
 # ---- Python ----
 __pycache__/

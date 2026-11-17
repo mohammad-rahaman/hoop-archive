@@ -16,8 +16,11 @@ from app.services.scheduler import scheduler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Starts the periodic Sportradar sync only when it is fully configured and
-    # enabled; otherwise this is a no-op and the app serves existing data.
-    scheduler.start()
+    # enabled; otherwise this is a no-op and the app serves existing data. Under
+    # a multi-worker server only the worker with enable_scheduler set runs it,
+    # so the sync doesn't fan out to every process.
+    if settings.enable_scheduler:
+        scheduler.start()
     try:
         yield
     finally:

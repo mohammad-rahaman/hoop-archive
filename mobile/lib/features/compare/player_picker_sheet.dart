@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/models.dart';
+import '../../core/widgets/player_avatar.dart';
 
 /// Modal search sheet for choosing a player for one comparison slot.
 ///
@@ -137,16 +138,10 @@ class _PlayerPickerSheetState extends ConsumerState<PlayerPickerSheet> {
                     itemBuilder: (context, i) {
                       final p = items[i];
                       return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor:
-                              t.colorScheme.primary.withValues(alpha: 0.15),
-                          child: Text(
-                            p.initials,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              color: t.colorScheme.primary,
-                            ),
-                          ),
+                        leading: PlayerAvatar(
+                          imageUrl: p.imageUrl,
+                          initials: p.initials,
+                          radius: 20,
                         ),
                         title: Text(p.fullName,
                             style:

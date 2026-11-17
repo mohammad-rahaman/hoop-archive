@@ -51,8 +51,6 @@ class HomeScreen extends ConsumerWidget {
                         label: const Text('Compare players'),
                       ),
                     ),
-                    const SizedBox(height: 24),
-                    const _Roadmap(),
                   ],
                 ),
               ),
@@ -97,7 +95,7 @@ class _Header extends StatelessWidget {
               ),
             ),
             Text(
-              'NBA player analytics · 1980 → today',
+              'NBA player analytics · 1979 → today',
               style: t.textTheme.bodySmall?.copyWith(
                 color: t.colorScheme.onSurfaceVariant,
               ),
@@ -324,62 +322,6 @@ class _OverviewError extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _Roadmap extends StatelessWidget {
-  const _Roadmap();
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    const items = [
-      ('Player search & filters', true),
-      ('Player profiles & season stats', true),
-      ('Performance trend charts', true),
-      ('Side-by-side comparison', true),
-      ('Offline access', true),
-    ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Features',
-          style: t.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 10),
-        Card(
-          child: Column(
-            children: [
-              for (var i = 0; i < items.length; i++)
-                Column(
-                  children: [
-                    ListTile(
-                      leading: Icon(
-                        items[i].$2
-                            ? Icons.check_circle
-                            : Icons.schedule_rounded,
-                        color: items[i].$2
-                            ? t.colorScheme.secondary
-                            : t.colorScheme.onSurfaceVariant,
-                      ),
-                      title: Text(items[i].$1),
-                      trailing: Text(
-                        items[i].$2 ? 'Ready' : 'Next',
-                        style: t.textTheme.labelSmall?.copyWith(
-                          color: t.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                    if (i != items.length - 1)
-                      const Divider(height: 1, indent: 16, endIndent: 16),
-                  ],
-                ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

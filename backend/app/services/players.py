@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Player, PlayerSeasonStats, Season, SeasonType, Team
 from app.etl.columns import normalize_name_key
+from app.etl.enrich_nba import headshot_url
 from app.schemas.player import (
     ComparisonPlayer,
     FilterOptions,
@@ -125,6 +126,7 @@ def list_players(
                 first_year=season_years[0] if season_years else None,
                 last_year=season_years[-1] if season_years else None,
                 latest_season=a.get("latest_label", (None, None))[1],
+                image_url=headshot_url(p.external_ids),
             )
         )
     return total, items
@@ -184,6 +186,7 @@ def get_player_detail(db: Session, player_id: int) -> Optional[PlayerDetail]:
         last_year=max(years) if years else None,
         season_count=len({s.season for s in seasons}),
         has_playoffs=has_playoffs,
+        image_url=headshot_url(player.external_ids),
         seasons=seasons,
     )
 
@@ -229,6 +232,7 @@ def _comparison_player(db: Session, player_id: int):
         first_year=min(years) if years else None,
         last_year=max(years) if years else None,
         season_count=len({y for y, _ in rows}),
+        image_url=headshot_url(player.external_ids),
     )
 
 

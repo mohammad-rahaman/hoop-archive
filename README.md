@@ -2,7 +2,7 @@
 
 A mobile-first NBA player analytics app. Browse and search players, explore
 season-by-season statistics and trend charts, and compare two players
-side-by-side — across historical seasons from **1980** to today, with offline
+side-by-side — across historical seasons from **1979** to today, with offline
 access to anything you've already viewed.
 
 > Portfolio project demonstrating Flutter, FastAPI, PostgreSQL, data
@@ -105,10 +105,13 @@ uvicorn app.main:app --reload # http://localhost:8000  (/docs for OpenAPI)
 
 ```bash
 # Inspect a dataset without writing anything (audit report):
-python3 -m app.etl.ingest --csv data/sample/sample_nba_synthetic.csv --audit-only
+python3 -m app.etl.ingest --csv ../cleaned_data.csv --year-is-end --audit-only
 
 # Idempotent ingestion (safe to re-run; updates instead of duplicating):
-python3 -m app.etl.ingest --csv data/sample/sample_nba_synthetic.csv
+python3 -m app.etl.ingest --csv ../cleaned_data.csv --year-is-end
+
+# Replace all existing data (e.g. removing prior sample data) with the CSV:
+python3 -m app.etl.ingest --csv ../cleaned_data.csv --year-is-end --replace
 ```
 
 The ingester maps CSV headers flexibly (case/punctuation-insensitive aliases),
@@ -148,10 +151,68 @@ records a `skipped` run and the app keeps serving historical data.
 
 ### Tests
 ```bash
-cd backend && PYTHONPATH=. python3 -m pytest -q   # 55 tests
+cd backend && PYTHONPATH=. python3 -m pytest -q   # 60 tests
 ```
 Tests run on in-memory SQLite — no running Postgres required, and no external
 network calls (the Sportradar client is exercised with a mock transport).
+
+### Running at scale (production)
+
+`uvicorn --reload` is a single process — fine for development, but it serves
+requests from one CPU core. For production, run under **Gunicorn with uvicorn
+workers** so requests use every core:
+
+```bash
+cd backend && ./scripts/run.sh            # gunicorn -c gunicorn_conf.py
+WEB_CONCURRENCY=4 ./scripts/run.sh        # pin the worker count
+```
+
+Each worker opens its own SQLAlchemy pool, so the total connections to Postgres
+is `workers × (db_pool_size + db_max_overflow)` and must stay under the server's
+`max_connections` (default 100). `gunicorn_conf.py` derives the worker count
+from a connection *budget* (`DB_CONNECTION_BUDGET`, default 80) for exactly this
+reason, and logs the resulting `workers × conns = total` on startup.
+
+Key tuning knobs (env / `.env`):
+
+| Setting | Default | Purpose |
+|---------|---------|---------|
+| `DB_POOL_SIZE` | 10 | Persistent connections per worker |
+| `DB_MAX_OVERFLOW` | 5 | Extra burst connections per worker |
+| `DB_POOL_TIMEOUT` | 10s | **Fail fast** when no connection is free, instead of hanging |
+| `DB_STATEMENT_TIMEOUT_MS` | 15000 | Cancel a runaway query and return its connection |
+| `WEB_CONCURRENCY` | auto | Gunicorn worker count (else derived from the budget) |
+| `DB_CONNECTION_BUDGET` | 80 | Upper bound on total DB connections across workers |
+
+Under a multi-worker server the background sync scheduler runs in **one** worker
+only (`gunicorn_conf.py` assigns it via `post_fork`), so a configured Sportradar
+sync doesn't fan out to every process.
+
+### Load testing
+
+A repeatable load harness lives in [`backend/loadtest/`](backend/loadtest/). It
+hits the API with a realistic read-only endpoint mix:
+
+```bash
+cd backend
+python3 loadtest/ramp.py                               # open-model arrival ramp
+STAGES="25:10,250:10,1000:10" python3 loadtest/ramp.py # custom ramp
+```
+
+It reports per-stage success % and p50/p95/p99 latency and flags the capacity
+*knee*. CI runs a gentle version of it as a gate (see
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml)), seeding **synthetic**
+data (`loadtest/seed_demo.py`, not real NBA data) so it needs no licensed
+dataset.
+
+**Measured on a 10-core dev machine:** steady-state the API serves ~500 req/s at
+~5 ms p95. The `pool_timeout` guard means a sudden flood of simultaneous
+connections now degrades and **self-recovers** in seconds (fast-failing the
+backlog) rather than wedging the process permanently as before. Staying fully
+*responsive* during such a flood — rejecting excess with a quick `503` — is the
+next step (an application-level concurrency limit / load-shedder), along with
+response caching (`Cache-Control`/ETag; the data is largely static) and a
+reverse-proxy micro-cache.
 
 ---
 

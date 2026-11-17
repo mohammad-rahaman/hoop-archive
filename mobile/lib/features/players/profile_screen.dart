@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/models.dart';
 import '../../core/widgets/offline_banner.dart';
+import '../../core/widgets/player_avatar.dart';
 import 'widgets/trend_charts.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -140,16 +141,12 @@ class _Header extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        CircleAvatar(
-          radius: 32,
-          backgroundColor: t.colorScheme.primary.withValues(alpha: 0.15),
-          child: Text(
-            detail.initials,
-            style: t.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: t.colorScheme.primary,
-            ),
-          ),
+        PlayerAvatar(
+          imageUrl: detail.imageUrl,
+          initials: detail.initials,
+          radius: 34,
+          borderColor: t.colorScheme.primary.withValues(alpha: 0.3),
+          borderWidth: 2,
         ),
         const SizedBox(width: 16),
         Expanded(

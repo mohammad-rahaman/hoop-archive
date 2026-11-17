@@ -60,3 +60,45 @@ def test_playoff_rows_separated(db_session, sample_csv):
         ).all()
     }
     assert SeasonType.PLAYOFF in types and SeasonType.REGULAR in types
+
+
+def test_ingest_bref_style_csv_handles_dups_end_years_team_names_and_replace(
+    db_session, sample_csv, tmp_path
+):
+    # First seed with synthetic data, then replace using a Basketball-Reference style CSV.
+    ingest_csv(db_session, sample_csv)
+    assert db_session.scalar(select(Player).where(Player.name_key == "marcus vale")) is not None
+
+    bref_csv = tmp_path / "bref.csv"
+    bref_csv.write_text(
+        "Player,Pos,Tm,Team,G,PTS,Year\n"
+        "Michael Jordan,SF,WAS,Washington Wizards,60,22.9,2002.0\n"
+        "Michael Jordan,SG,CHI,Chicago Bulls,82,31.5,1991.0\n"
+        "Michael Jordan,SG,CHI,Chicago Bulls,80,30.1,1992.0\n"
+        "Dee Brown,PG,BOS,Boston Celtics,80,10.9,1993.0\n"
+        "Dee Brown,PG,BOS,Boston Celtics,80,10.9,1993.0\n",
+        encoding="utf-8",
+    )
+
+    res = ingest_csv(
+        db_session, str(bref_csv), bare_year_is_end=True, replace_existing=True
+    )
+    assert res.rows_read == 5
+    assert res.rows_skipped == 0
+    assert res.stats_inserted == 4
+    assert res.stats_updated == 1
+
+    # Synthetic data was cleared.
+    assert db_session.scalar(select(Player).where(Player.name_key == "marcus vale")) is None
+
+    # Primary position picked by GP weight (SG over SF despite SF appearing first).
+    mj = db_session.scalar(select(Player).where(Player.name_key == "michael jordan"))
+    assert mj is not None and mj.position == "SG"
+
+    # Season end year 1991.0 became 1990-91, and Team.name was populated.
+    chi = db_session.scalar(select(Team).where(Team.abbreviation == "CHI"))
+    assert chi is not None and chi.name == "Chicago Bulls"
+    seasons = {
+        s.label for s in db_session.scalars(select(Season)).all()
+    }
+    assert seasons == {"1990-91", "1991-92", "1992-93", "2001-02"}

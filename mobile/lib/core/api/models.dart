@@ -52,6 +52,7 @@ class PlayerListItem {
   final int? firstYear;
   final int? lastYear;
   final String? latestSeason;
+  final String? imageUrl;
 
   const PlayerListItem({
     required this.id,
@@ -63,6 +64,7 @@ class PlayerListItem {
     required this.firstYear,
     required this.lastYear,
     required this.latestSeason,
+    this.imageUrl,
   });
 
   factory PlayerListItem.fromJson(Map<String, dynamic> json) => PlayerListItem(
@@ -77,6 +79,7 @@ class PlayerListItem {
         firstYear: json['first_year'] as int?,
         lastYear: json['last_year'] as int?,
         latestSeason: json['latest_season'] as String?,
+        imageUrl: json['image_url'] as String?,
       );
 
   String get careerSpan {
@@ -198,6 +201,7 @@ class PlayerDetail {
   final int? lastYear;
   final int seasonCount;
   final bool hasPlayoffs;
+  final String? imageUrl;
   final List<SeasonStatRow> seasons;
 
   const PlayerDetail({
@@ -210,6 +214,7 @@ class PlayerDetail {
     required this.lastYear,
     required this.seasonCount,
     required this.hasPlayoffs,
+    this.imageUrl,
     required this.seasons,
   });
 
@@ -225,6 +230,7 @@ class PlayerDetail {
         lastYear: json['last_year'] as int?,
         seasonCount: (json['season_count'] ?? 0) as int,
         hasPlayoffs: (json['has_playoffs'] ?? false) as bool,
+        imageUrl: json['image_url'] as String?,
         seasons: ((json['seasons'] as List?) ?? const [])
             .map((e) => SeasonStatRow.fromJson(e as Map<String, dynamic>))
             .toList(),
@@ -272,6 +278,7 @@ class ComparisonPlayer {
   final int? firstYear;
   final int? lastYear;
   final int seasonCount;
+  final String? imageUrl;
 
   const ComparisonPlayer({
     required this.id,
@@ -281,6 +288,7 @@ class ComparisonPlayer {
     required this.firstYear,
     required this.lastYear,
     required this.seasonCount,
+    this.imageUrl,
   });
 
   factory ComparisonPlayer.fromJson(Map<String, dynamic> json) =>
@@ -294,6 +302,7 @@ class ComparisonPlayer {
         firstYear: json['first_year'] as int?,
         lastYear: json['last_year'] as int?,
         seasonCount: (json['season_count'] ?? 0) as int,
+        imageUrl: json['image_url'] as String?,
       );
 
   String get careerSpan {

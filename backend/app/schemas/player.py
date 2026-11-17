@@ -14,6 +14,7 @@ class PlayerListItem(BaseModel):
     first_year: Optional[int] = None
     last_year: Optional[int] = None
     latest_season: Optional[str] = None
+    image_url: Optional[str] = None
 
     @property
     def career_span(self) -> Optional[str]:  # pragma: no cover - display helper
@@ -62,6 +63,7 @@ class PlayerDetail(BaseModel):
     last_year: Optional[int] = None
     season_count: int = 0
     has_playoffs: bool = False
+    image_url: Optional[str] = None
     seasons: List[SeasonStatRow] = []
 
 
@@ -78,6 +80,7 @@ class ComparisonPlayer(BaseModel):
     first_year: Optional[int] = None
     last_year: Optional[int] = None
     season_count: int = 0
+    image_url: Optional[str] = None
 
 
 class MetricComparisonRow(BaseModel):

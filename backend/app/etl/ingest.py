@@ -13,9 +13,9 @@ import argparse
 import csv
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Set
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
@@ -53,16 +53,28 @@ class IngestResult:
         )
 
 
-def _get_or_create_team(session: Session, cache: Dict[str, Team], abbr: Optional[str], res: IngestResult) -> Team:
+def _get_or_create_team(
+    session: Session,
+    cache: Dict[str, Team],
+    abbr: Optional[str],
+    res: IngestResult,
+    team_name: Optional[str] = None,
+) -> Team:
     key = (abbr or "").strip().upper() or UNKNOWN_TEAM
+    cleaned_name = team_name.strip() if (team_name and key != UNKNOWN_TEAM) else None
     if key in cache:
-        return cache[key]
+        team = cache[key]
+        if cleaned_name and not team.name:
+            team.name = cleaned_name
+        return team
     team = session.scalar(select(Team).where(Team.abbreviation == key))
     if team is None:
-        team = Team(abbreviation=key, name=None if key == UNKNOWN_TEAM else None)
+        team = Team(abbreviation=key, name=cleaned_name)
         session.add(team)
         session.flush()
         res.teams_created += 1
+    elif cleaned_name and not team.name:
+        team.name = cleaned_name
     cache[key] = team
     return team
 
@@ -117,13 +129,28 @@ def ingest_csv(
     source: str = "kaggle_csv",
     source_label: Optional[str] = None,
     batch_size: int = 500,
+    bare_year_is_end: bool = False,
+    replace_existing: bool = False,
 ) -> IngestResult:
     res = IngestResult()
     started = datetime.now(timezone.utc)
 
+    if replace_existing:
+        session.execute(delete(PlayerSeasonStats))
+        session.execute(delete(Player))
+        session.execute(delete(Season))
+        session.execute(delete(Team))
+        session.execute(delete(SyncMetadata))
+        session.flush()
+
     team_cache: Dict[str, Team] = {}
     season_cache: Dict[str, Season] = {}
     player_cache: Dict[str, Player] = {}
+    stat_cache: Dict[tuple, PlayerSeasonStats] = {}
+    new_player_ids: Set[int] = set()
+    # player_id -> position -> [total_gp_weight, latest_year_start]
+    pos_candidates: Dict[int, Dict[str, List[int]]] = {}
+    resolve_pos_players: Dict[int, Player] = {}
 
     with open(path, newline="", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
@@ -146,28 +173,43 @@ def ingest_csv(
             res.rows_read += 1
 
             name = getval(row, "player_name")
-            parsed = C.parse_season(getval(row, "season"))
+            parsed = C.parse_season(getval(row, "season"), bare_year_is_end=bare_year_is_end)
             if not name or parsed is None:
                 res.rows_skipped += 1
                 continue
             label, year_start = parsed
 
-            team = _get_or_create_team(session, team_cache, getval(row, "team"), res)
+            team = _get_or_create_team(
+                session, team_cache, getval(row, "team"), res,
+                team_name=getval(row, "team_name"),
+            )
             season = _get_or_create_season(session, season_cache, label, year_start, res)
+            players_before = res.players_created
             player = _get_or_create_player(
                 session, player_cache, str(name),
-                getval(row, "position"), getval(row, "jersey_number"), res,
+                None, getval(row, "jersey_number"), res,
             )
-            season_type = SeasonType(C.parse_season_type(getval(row, "season_type")))
+            if res.players_created > players_before:
+                new_player_ids.add(player.id)
+            if not player.position:
+                resolve_pos_players[player.id] = player
 
-            stat = session.scalar(
-                select(PlayerSeasonStats).where(
-                    PlayerSeasonStats.player_id == player.id,
-                    PlayerSeasonStats.season_id == season.id,
-                    PlayerSeasonStats.team_id == team.id,
-                    PlayerSeasonStats.season_type == season_type,
+            season_type = SeasonType(C.parse_season_type(getval(row, "season_type")))
+            stat_key = (player.id, season.id, team.id, season_type)
+
+            stat = stat_cache.get(stat_key)
+            if stat is None and player.id not in new_player_ids:
+                stat = session.scalar(
+                    select(PlayerSeasonStats).where(
+                        PlayerSeasonStats.player_id == player.id,
+                        PlayerSeasonStats.season_id == season.id,
+                        PlayerSeasonStats.team_id == team.id,
+                        PlayerSeasonStats.season_type == season_type,
+                    )
                 )
-            )
+                if stat is not None:
+                    stat_cache[stat_key] = stat
+
             is_new = stat is None
             if is_new:
                 stat = PlayerSeasonStats(
@@ -175,20 +217,35 @@ def ingest_csv(
                     season_type=season_type,
                 )
                 session.add(stat)
+                stat_cache[stat_key] = stat
 
+            gp_val = coerce_int(getval(row, "gp"))
             stat.stat_mode = stat_mode
             stat.source = source
-            stat.gp = coerce_int(getval(row, "gp"))
+            stat.gp = gp_val
             for fld in _STAT_FLOAT_FIELDS:
                 setattr(stat, fld, coerce_float(getval(row, fld)))
 
             if is_new:
                 res.stats_inserted += 1
+                pos = getval(row, "position")
+                if pos and player.id in resolve_pos_players:
+                    p_clean = pos.strip()
+                    weight = max(gp_val or 1, 1)
+                    entry = pos_candidates.setdefault(player.id, {}).setdefault(p_clean, [0, year_start])
+                    entry[0] += weight
+                    entry[1] = max(entry[1], year_start)
             else:
                 res.stats_updated += 1
 
             if res.rows_read % batch_size == 0:
                 session.flush()
+
+    for pid, player in resolve_pos_players.items():
+        candidates = pos_candidates.get(pid)
+        if candidates and not player.position:
+            best_pos = max(candidates.items(), key=lambda kv: (kv[1][0], kv[1][1]))[0]
+            player.position = best_pos
 
     meta = SyncMetadata(
         provider=source,
@@ -210,10 +267,22 @@ def main() -> None:
     parser.add_argument("--csv", required=True, help="Path to the CSV file.")
     parser.add_argument("--stat-mode", choices=[m.value for m in StatMode], default=StatMode.PER_GAME.value)
     parser.add_argument("--source", default="kaggle_csv")
+    parser.add_argument("--source-label", default=None, help="Optional display label stored in sync_metadata.")
+    parser.add_argument(
+        "--year-is-end",
+        action="store_true",
+        help="Treat bare 4-digit years (e.g. 1991 or 1991.0) as the season end year (1990-91).",
+    )
+    parser.add_argument(
+        "--replace",
+        action="store_true",
+        help="Clear existing database rows before ingesting.",
+    )
     parser.add_argument("--audit-only", action="store_true", help="Print the audit report and exit without writing.")
     args = parser.parse_args()
 
-    report = audit_csv(args.csv, source_label=args.csv)
+    label = args.source_label or args.csv
+    report = audit_csv(args.csv, source_label=label, bare_year_is_end=args.year_is_end)
     print(report.summary())
     if args.audit_only:
         return
@@ -227,7 +296,9 @@ def main() -> None:
             session, args.csv,
             stat_mode=StatMode(args.stat_mode),
             source=args.source,
-            source_label=args.csv,
+            source_label=label,
+            bare_year_is_end=args.year_is_end,
+            replace_existing=args.replace,
         )
     print(result.summary())
 

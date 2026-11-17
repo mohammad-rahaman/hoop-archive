@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend-tests:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r requirements.txt
+      - name: Run tests
+        env:
+          PYTHONPATH: .
+        run: python -m pytest -q
+
+  load-smoke:
+    name: Load smoke gate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hoop_archive_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PYTHONPATH: .
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/hoop_archive_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r requirements.txt
+
+      - name: Seed synthetic data (not real NBA data)
+        run: python loadtest/seed_demo.py 200
+
+      - name: Start API (gunicorn, multi-worker)
+        run: |
+          gunicorn app.main:app -c gunicorn_conf.py > gunicorn.log 2>&1 &
+          echo "GUNICORN_PID=$!" >> "$GITHUB_ENV"
+          curl -s --retry 30 --retry-delay 1 --retry-all-errors \
+            -o /dev/null -w "health: %{http_code}\n" http://127.0.0.1:8000/health
+
+      - name: Load smoke gate
+        env:
+          STAGES: "25:4,75:4,150:4"
+          RTO: "5"
+          MAX_INFLIGHT: "1000"
+          # Generous for a 2-core shared runner; the point is to catch a
+          # regression that makes the API fall over, not to benchmark hardware.
+          ASSERT_OK_PCT: "99"
+          ASSERT_P95_MS: "1000"
+        run: python loadtest/ramp.py
+
+      - name: API logs (on failure)
+        if: failure()
+        run: cat gunicorn.log || true
+
+      - name: Stop API
+        if: always()
+        run: kill "$GUNICORN_PID" 2>/dev/null || true

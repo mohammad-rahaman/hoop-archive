@@ -71,7 +71,12 @@ class AuditReport:
         return "\n".join(lines)
 
 
-def audit_csv(path: str, source_label: Optional[str] = None, sample_limit: Optional[int] = None) -> AuditReport:
+def audit_csv(
+    path: str,
+    source_label: Optional[str] = None,
+    sample_limit: Optional[int] = None,
+    bare_year_is_end: bool = False,
+) -> AuditReport:
     """Read the CSV once and compute an audit report."""
     report = AuditReport(source_label=source_label or path)
     with open(path, newline="", encoding="utf-8-sig") as f:
@@ -110,7 +115,7 @@ def audit_csv(path: str, source_label: Optional[str] = None, sample_limit: Optio
             if team and str(team).strip():
                 teams.add(str(team).strip().upper())
 
-            parsed = C.parse_season(val("season"))
+            parsed = C.parse_season(val("season"), bare_year_is_end=bare_year_is_end)
             if parsed is None:
                 report.unparseable_seasons += 1
             else:

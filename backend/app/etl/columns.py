@@ -10,12 +10,13 @@ import re
 import unicodedata
 from typing import Dict, List, Optional
 
-# canonical field -> accepted header aliases (compared after normalization)
+# canonical field -> accepted header aliases (ordered by preference, compared after normalization)
 COLUMN_ALIASES: Dict[str, List[str]] = {
     "player_name": ["player", "player_name", "name", "playername"],
     "season": ["season", "year", "yr", "season_id"],
     "season_type": ["season_type", "stage", "type", "playoffs", "is_playoffs"],
-    "team": ["team", "team_abbreviation", "tm", "team_abbr", "team_id"],
+    "team": ["tm", "team_abbreviation", "team_abbr", "team_id", "team"],
+    "team_name": ["team_name", "team", "franchise"],
     "position": ["position", "pos"],
     "jersey_number": ["jersey", "jersey_number", "number", "no"],
     "gp": ["gp", "g", "games", "games_played"],
@@ -64,9 +65,9 @@ def normalize_header(h: str) -> str:
     return re.sub(r"[^a-z0-9]", "", h)
 
 
-# Pre-normalize aliases once.
+# Pre-normalize aliases once, preserving preference order.
 _NORMALIZED_ALIASES = {
-    canonical: {normalize_header(a) for a in aliases}
+    canonical: [normalize_header(a) for a in aliases]
     for canonical, aliases in COLUMN_ALIASES.items()
 }
 
@@ -74,18 +75,22 @@ _NORMALIZED_ALIASES = {
 def build_column_map(headers: List[str]) -> Dict[str, str]:
     """Map canonical field -> actual header present in the CSV.
 
-    First matching header wins. Headers that match no canonical field are simply
-    omitted (and reported separately by the validator).
+    Aliases are checked in priority order so specific columns (e.g. ``Tm``)
+    win over ambiguous ones (e.g. ``Team``). Unmapped headers are omitted and
+    reported separately by the validator.
     """
     mapping: Dict[str, str] = {}
     used_headers = set()
+    normalized_headers = [(h, normalize_header(h)) for h in headers]
     for canonical, norm_aliases in _NORMALIZED_ALIASES.items():
-        for header in headers:
-            if header in used_headers:
-                continue
-            if normalize_header(header) in norm_aliases:
-                mapping[canonical] = header
-                used_headers.add(header)
+        for alias in norm_aliases:
+            match = next(
+                (h for h, nh in normalized_headers if h not in used_headers and nh == alias),
+                None,
+            )
+            if match is not None:
+                mapping[canonical] = match
+                used_headers.add(match)
                 break
     return mapping
 
@@ -105,11 +110,13 @@ def normalize_name_key(name: str) -> str:
     return re.sub(r"\s+", " ", name)
 
 
-def parse_season(raw: str) -> Optional[tuple]:
+def parse_season(raw: str, bare_year_is_end: bool = False) -> Optional[tuple]:
     """Parse a season label into (canonical_label, year_start).
 
-    Handles "1996-97", "1996-1997", "1996", "96-97". Returns None if unparseable.
-    A bare 4-digit year is treated as the season's *start* year.
+    Handles "1996-97", "1996-1997", "1996", "1996.0", "96-97". Returns None if
+    unparseable. By default a bare 4-digit year is treated as the season's
+    *start* year; pass ``bare_year_is_end=True`` for Basketball-Reference style
+    datasets where ``Year=1991`` denotes the 1990-91 season.
     """
     if raw is None:
         return None
@@ -128,9 +135,10 @@ def parse_season(raw: str) -> Optional[tuple]:
         start = 1900 + yy if yy >= 50 else 2000 + yy
         return (f"{start}-{str(start + 1)[-2:]}", start)
 
-    m = re.match(r"^(\d{4})$", s)  # bare year -> treat as start year
+    m = re.match(r"^(\d{4})(?:\.0+)?$", s)  # bare year (incl. float-formatted "1991.0")
     if m:
-        start = int(m.group(1))
+        year = int(m.group(1))
+        start = year - 1 if bare_year_is_end else year
         return (f"{start}-{str(start + 1)[-2:]}", start)
 
     return None

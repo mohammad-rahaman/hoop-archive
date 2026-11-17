@@ -1,6 +1,7 @@
 # Hoop Archive — backend dependencies
 fastapi==0.115.0
 uvicorn[standard]==0.32.0
+gunicorn==23.0.0
 sqlalchemy==2.0.36
 alembic==1.13.3
 pydantic==2.10.1

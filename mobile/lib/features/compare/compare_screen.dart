@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/models.dart';
+import '../../core/widgets/player_avatar.dart';
 import 'player_picker_sheet.dart';
 
 /// A player chosen for a comparison slot. Built from a search result or, on a
@@ -12,7 +13,13 @@ class PickedPlayer {
   final int id;
   final String fullName;
   final String? position;
-  const PickedPlayer({required this.id, required this.fullName, this.position});
+  final String? imageUrl;
+  const PickedPlayer({
+    required this.id,
+    required this.fullName,
+    this.position,
+    this.imageUrl,
+  });
 
   String get initials {
     final parts =
@@ -49,8 +56,12 @@ class _CompareScreenState extends ConsumerState<CompareScreen> {
     try {
       final d = await ref.read(apiClientProvider).fetchPlayerDetail(id);
       if (!mounted) return;
-      final picked =
-          PickedPlayer(id: d.id, fullName: d.fullName, position: d.position);
+      final picked = PickedPlayer(
+        id: d.id,
+        fullName: d.fullName,
+        position: d.position,
+        imageUrl: d.imageUrl,
+      );
       setState(() => isA ? _a = picked : _b = picked);
     } catch (_) {
       // Silently ignore a bad preset id; the slot stays empty for the user.
@@ -69,6 +80,7 @@ class _CompareScreenState extends ConsumerState<CompareScreen> {
       id: result.id,
       fullName: result.fullName,
       position: result.position,
+      imageUrl: result.imageUrl,
     );
     setState(() => isA ? _a = picked : _b = picked);
   }
@@ -196,14 +208,16 @@ class _SlotCard extends StatelessWidget {
             : Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CircleAvatar(
-                    radius: 26,
+                  PlayerAvatar(
+                    imageUrl: p.imageUrl,
+                    initials: p.initials,
+                    radius: 22,
                     backgroundColor: accent.withValues(alpha: 0.18),
-                    child: Text(p.initials,
-                        style: t.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w900, color: accent)),
+                    foregroundColor: accent,
+                    borderColor: accent.withValues(alpha: 0.4),
+                    borderWidth: 1.0,
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 6),
                   Text(
                     p.fullName,
                     textAlign: TextAlign.center,
