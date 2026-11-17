@@ -1,28 +1,44 @@
 # 🏀 Hoop Archive
 
 A mobile-first NBA player analytics app. Browse and search players, explore
-season-by-season statistics and trend charts, and compare two players
-side-by-side — across historical seasons from **1979** to today, with offline
-access to anything you've already viewed.
+season-by-season charts, and compare two players side-by-side — whole careers
+or a single season each — across historical seasons from **1979** to **2020-21**,
+with offline access to anything you've already viewed.
 
 > Portfolio project demonstrating Flutter, FastAPI, PostgreSQL, data
 > engineering (ETL), third-party API integration, data visualization, and
 > offline-first architecture.
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/01-archive.png" width="19%" alt="Archive overview — 3,275 players, 1979–2021" />
+  <img src="docs/screenshots/02-players-search.png" width="19%" alt="Player search with headshots" />
+  <img src="docs/screenshots/03-profile.png" width="19%" alt="Player profile with a season-by-season chart" />
+  <img src="docs/screenshots/04-season-picker.png" width="19%" alt="Pick a single season to compare" />
+  <img src="docs/screenshots/05-compare.png" width="19%" alt="Season-vs-season comparison, Curry 2015-16 vs Doncic 2020-21" />
+</p>
+
+<p align="center"><em>Archive overview · player search · career profile · season picker · season-vs-season comparison.</em></p>
+
+> Dark, iOS-first interface built around one accent colour. Player headshots
+> come from the NBA's public CDN; older players without an official headshot
+> fall back to their initials.
+
 ---
 
 ## Features
 
-- **Browse & search** players with debounced search and team / position
-  filters, infinite-scroll pagination.
-- **Player profiles** with full season-by-season stat tables, a regular-season
-  / playoffs toggle, and multi-team seasons shown alongside the league `TOT`
-  aggregate.
-- **Trend charts** (`fl_chart`) of scoring and efficiency across a career, with
-  missing seasons skipped rather than drawn as zero.
-- **Side-by-side comparison** of two players on career averages, with per-metric
-  leader highlighting and an honest "not comparable" state for metrics one
-  player is missing (never scored as 0).
+- **Browse & search** players with debounced search and season / team /
+  position filters, infinite-scroll pagination.
+- **Player profiles** with a season-by-season column chart you can scrub (one
+  bar per season, the career high marked, missing seasons shown as a gap and
+  never as zero), full stat tables, a regular-season / playoffs toggle, and
+  multi-team seasons shown alongside the league `TOT` aggregate.
+- **Compare two players** on whole careers *or a single season each* (e.g. one
+  MVP year against another), with per-metric leader highlighting and an honest
+  "not comparable" state for metrics one player is missing (never scored as 0).
+  Regular season and playoffs stay strictly separate.
 - **Current-season sync** from Sportradar through a swappable provider, behind a
   dependency-free scheduled background job that is **off unless configured**.
 - **Offline access** — every response you load is cached locally, so players,
@@ -263,8 +279,14 @@ See [`mobile/README.md`](mobile/README.md) for the app's internal structure.
 | 2 | PostgreSQL schema, migrations, idempotent CSV ingestion | ✅ Done |
 | 3 | Player list, search, team/position filters, pagination | ✅ Done |
 | 4 | Player profile & season statistics | ✅ Done |
-| 5 | Trend charts (fl_chart) | ✅ Done |
-| 6 | Player comparison (leader highlighting) | ✅ Done |
+| 5 | Season-by-season charts (custom-painted columns) | ✅ Done |
+| 6 | Player comparison (career or single-season, leader highlighting) | ✅ Done |
 | 7 | Sportradar integration & scheduled sync | ✅ Done |
 | 8 | Offline caching (document cache, swappable store) | ✅ Done |
 | 9 | Testing, UI polish, docs | ✅ Done |
+| 10 | iOS-first redesign + season-vs-season comparison | ✅ Done |
+| 11 | Backend scaling (multi-worker, pooling, load test, CI) | ✅ Done |
+
+What's deliberately **next** (not missing from the MVP) lives in
+[ROADMAP.md](ROADMAP.md): burst load-shedding, the pending CI green check, and
+optional live current-season sync.
