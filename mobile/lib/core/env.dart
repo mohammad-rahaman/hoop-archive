@@ -9,8 +9,10 @@ import 'package:flutter/foundation.dart';
 class Env {
   const Env._();
 
-  static const String _override =
-      String.fromEnvironment('API_BASE_URL', defaultValue: '');
+  static const String _override = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: '',
+  );
 
   static String get apiBaseUrl {
     if (_override.isNotEmpty) return _override;

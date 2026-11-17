@@ -80,3 +80,27 @@ def test_latest_season_and_span(client):
     assert item["first_year"] == 2015
     assert item["last_year"] == 2016
     assert item["latest_season"] == "2016-17"
+
+
+def test_filter_by_season(client):
+    body = client.get("/players", params={"season": "2020-21"}).json()
+    names = {i["full_name"] for i in body["items"]}
+    # Priya played 2020-21; Kenji has a 2020-21 row (all stats missing) and is
+    # still a player of that season.
+    assert names == {"Priya Anand", "Kenji Sato"}
+
+
+def test_season_filter_combines_with_team(client):
+    body = client.get("/players", params={"season": "2015-16", "team": "CHI"}).json()
+    assert {i["full_name"] for i in body["items"]} == {"Eli Marsh"}
+
+
+def test_malformed_season_filter_rejected(client):
+    assert client.get("/players", params={"season": "2016"}).status_code == 422
+
+
+def test_filter_options_list_seasons_newest_first(client):
+    seasons = client.get("/players/filters").json()["seasons"]
+    assert seasons[0] == "2020-21"
+    assert seasons[-1] == "1980-81"
+    assert seasons == sorted(seasons, reverse=True)

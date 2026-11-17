@@ -3,24 +3,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hoop_archive/core/widgets/player_avatar.dart';
 
 void main() {
-  testWidgets('PlayerAvatar renders initials fallback when imageUrl is null',
-      (tester) async {
+  testWidgets('PlayerAvatar renders initials fallback when imageUrl is null', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       const MaterialApp(
-        home: Scaffold(
-          body: PlayerAvatar(
-            initials: 'MJ',
-            radius: 24,
-          ),
-        ),
+        home: Scaffold(body: PlayerAvatar(initials: 'MJ', radius: 24)),
       ),
     );
 
     expect(find.text('MJ'), findsOneWidget);
   });
 
-  testWidgets('PlayerAvatar renders initials fallback when imageUrl is empty',
-      (tester) async {
+  testWidgets('PlayerAvatar renders initials fallback when imageUrl is empty', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/router.dart';
@@ -13,13 +14,17 @@ class HoopArchiveApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
-      title: 'Hoop Archive',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.dark,
-      routerConfig: appRouter,
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: MaterialApp.router(
+        title: 'Hoop Archive',
+        debugShowCheckedModeBanner: false,
+        // The archive is a dark instrument panel by design; there is no light
+        // variant to fall back to.
+        theme: AppTheme.dark,
+        themeMode: ThemeMode.dark,
+        routerConfig: appRouter,
+      ),
     );
   }
 }

@@ -1,13 +1,16 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/models.dart';
+import '../../core/theme.dart';
 import '../../core/widgets/player_avatar.dart';
+import '../../core/widgets/ui.dart';
 
-/// Modal search sheet for choosing a player for one comparison slot.
+/// Search sheet for choosing a player for one comparison slot.
 ///
 /// Returns the chosen [PlayerListItem] via `Navigator.pop`. [excludeId] hides a
 /// player already selected in the other slot so the two can't match.
@@ -23,6 +26,8 @@ class PlayerPickerSheet extends ConsumerStatefulWidget {
   }) {
     return showModalBottomSheet<PlayerListItem>(
       context: context,
+      // Sheets cover the tab bar, as on iOS.
+      useRootNavigator: true,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (_) => PlayerPickerSheet(excludeId: excludeId, title: title),
@@ -53,10 +58,9 @@ class _PlayerPickerSheetState extends ConsumerState<PlayerPickerSheet> {
   }
 
   Future<List<PlayerListItem>> _load(String q) async {
-    final page = await ref.read(apiClientProvider).fetchPlayers(
-          q: q,
-          pageSize: 30,
-        );
+    final page = await ref
+        .read(apiClientProvider)
+        .fetchPlayers(q: q, pageSize: 30);
     return page.items.where((p) => p.id != widget.excludeId).toList();
   }
 
@@ -72,40 +76,37 @@ class _PlayerPickerSheetState extends ConsumerState<PlayerPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
     final insets = MediaQuery.of(context).viewInsets.bottom;
     return Padding(
       padding: EdgeInsets.only(bottom: insets),
       child: SizedBox(
-        height: MediaQuery.of(context).size.height * 0.78,
+        height: MediaQuery.of(context).size.height * 0.8,
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(widget.title,
-                    style: t.textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w800)),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Text(
+                widget.title,
+                style: Txt.title.copyWith(fontSize: 22),
               ),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: TextField(
+              child: CupertinoSearchTextField(
                 controller: _ctrl,
                 autofocus: true,
                 onChanged: _onChanged,
-                textInputAction: TextInputAction.search,
-                decoration: InputDecoration(
-                  hintText: 'Search players',
-                  prefixIcon: const Icon(Icons.search),
-                  isDense: true,
-                  filled: true,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide.none,
-                  ),
+                placeholder: 'Search players',
+                backgroundColor: Hue.ground,
+                itemColor: Hue.textMid,
+                style: Txt.body.copyWith(fontSize: 17),
+                placeholderStyle: Txt.body.copyWith(
+                  fontSize: 17,
+                  color: Hue.textLo,
                 ),
+                borderRadius: BorderRadius.circular(12),
+                padding: const EdgeInsets.fromLTRB(6, 10, 6, 10),
               ),
             ),
             const SizedBox(height: 8),
@@ -114,45 +115,63 @@ class _PlayerPickerSheetState extends ConsumerState<PlayerPickerSheet> {
                 future: _future,
                 builder: (context, snap) {
                   if (snap.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
+                    return const Loading();
                   }
                   if (snap.hasError) {
-                    return _PickerMessage(
-                      icon: Icons.wifi_off_rounded,
-                      text: "Couldn't search players",
+                    return const MessageState(
+                      icon: CupertinoIcons.wifi_slash,
+                      title: "Couldn't search players",
+                      message: 'Check your connection and try again.',
                     );
                   }
                   final items = snap.data ?? const [];
                   if (items.isEmpty) {
-                    return _PickerMessage(
-                      icon: Icons.search_off_rounded,
-                      text: _query.isEmpty
+                    return MessageState(
+                      icon: CupertinoIcons.search,
+                      title: _query.isEmpty
                           ? 'No players available'
                           : 'No players match "$_query"',
                     );
                   }
                   return ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
+                    padding: const EdgeInsets.only(bottom: 24),
                     itemCount: items.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 4),
+                    separatorBuilder: (_, _) => const Divider(indent: 76),
                     itemBuilder: (context, i) {
                       final p = items[i];
-                      return ListTile(
-                        leading: PlayerAvatar(
-                          imageUrl: p.imageUrl,
-                          initials: p.initials,
-                          radius: 20,
-                        ),
-                        title: Text(p.fullName,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w700)),
-                        subtitle: Text(
-                          '${[
-                            if (p.position != null) p.position,
-                            if (p.latestTeam != null) p.latestTeam,
-                          ].join(' · ')} · ${p.careerSpan}',
-                        ),
+                      final meta = [
+                        if (p.position != null) p.position!,
+                        if (p.latestTeam != null) p.latestTeam!,
+                        p.careerSpan,
+                      ].join(' · ');
+                      return InkWell(
                         onTap: () => Navigator.of(context).pop(p),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 11,
+                          ),
+                          child: Row(
+                            children: [
+                              PlayerAvatar(
+                                imageUrl: p.imageUrl,
+                                initials: p.initials,
+                                radius: 22,
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(p.fullName, style: Txt.headline),
+                                    const SizedBox(height: 2),
+                                    Text(meta, style: Txt.caption),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       );
                     },
                   );
@@ -161,29 +180,6 @@ class _PlayerPickerSheetState extends ConsumerState<PlayerPickerSheet> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _PickerMessage extends StatelessWidget {
-  final IconData icon;
-  final String text;
-  const _PickerMessage({required this.icon, required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 40, color: t.colorScheme.onSurfaceVariant),
-          const SizedBox(height: 10),
-          Text(text,
-              style: t.textTheme.bodyMedium
-                  ?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-        ],
       ),
     );
   }

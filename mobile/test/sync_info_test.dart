@@ -2,12 +2,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hoop_archive/core/api/models.dart';
 
 SyncInfo _sync(String provider, String? finishedAt) => SyncInfo(
-      provider: provider,
-      sourceLabel: null,
-      finishedAt: finishedAt,
-      rowsIngested: 0,
-      rowsUpdated: 0,
-    );
+  provider: provider,
+  sourceLabel: null,
+  finishedAt: finishedAt,
+  rowsIngested: 0,
+  rowsUpdated: 0,
+);
 
 void main() {
   test('provider labels are humanized', () {
@@ -23,10 +23,14 @@ void main() {
 
   test('updatedLabel renders recent relative times', () {
     final now = DateTime.now().toUtc();
-    final fiveMinAgo = now.subtract(const Duration(minutes: 5)).toIso8601String();
+    final fiveMinAgo = now
+        .subtract(const Duration(minutes: 5))
+        .toIso8601String();
     expect(_sync('sportradar', fiveMinAgo).updatedLabel, 'updated 5m ago');
 
-    final threeHoursAgo = now.subtract(const Duration(hours: 3)).toIso8601String();
+    final threeHoursAgo = now
+        .subtract(const Duration(hours: 3))
+        .toIso8601String();
     expect(_sync('sportradar', threeHoursAgo).updatedLabel, 'updated 3h ago');
   });
 

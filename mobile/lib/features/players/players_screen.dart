@@ -1,14 +1,20 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/models.dart';
+import '../../core/theme.dart';
 import '../../core/widgets/offline_banner.dart';
 import '../../core/widgets/player_avatar.dart';
+import '../../core/widgets/ui.dart';
 import 'players_controller.dart';
+
+final _count = NumberFormat.decimalPattern('en_US');
 
 class PlayersScreen extends ConsumerStatefulWidget {
   const PlayersScreen({super.key});
@@ -49,254 +55,338 @@ class _PlayersScreenState extends ConsumerState<PlayersScreen> {
     });
   }
 
+  void _clearAll() {
+    _debounce?.cancel();
+    _searchCtrl.clear();
+    ref.read(playersControllerProvider.notifier).clearFilters();
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(playersControllerProvider);
     final controller = ref.read(playersControllerProvider.notifier);
-    final filters = ref.watch(filterOptionsProvider);
+    final filters =
+        ref.watch(filterOptionsProvider).valueOrNull ?? FilterOptions.empty;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Players'),
-        actions: [
-          IconButton(
-            tooltip: 'Compare players',
-            onPressed: () => context.push('/compare'),
-            icon: const Icon(Icons.compare_arrows_rounded),
-          ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(108),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: Column(
-              children: [
-                _SearchField(
-                  controller: _searchCtrl,
-                  onChanged: _onSearchChanged,
-                  onClear: () {
-                    _searchCtrl.clear();
-                    controller.setQuery('');
-                  },
-                ),
-                const SizedBox(height: 10),
-                _FilterBar(
-                  options: filters.valueOrNull ?? FilterOptions.empty,
-                  team: state.team,
-                  position: state.position,
-                  onTeam: controller.setTeam,
-                  onPosition: controller.setPosition,
-                  onClear: state.hasActiveFilters
-                      ? controller.clearFilters
-                      : null,
-                ),
-              ],
-            ),
-          ),
+      body: CustomScrollView(
+        controller: _scroll,
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
         ),
-      ),
-      body: Column(
-        children: [
-          const OfflineBanner(),
-          if (state.fromCache && state.cachedAt != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: CachedCopyNote(cachedAt: state.cachedAt!),
+        slivers: [
+          CupertinoSliverNavigationBar(
+            largeTitle: const Text('Players'),
+            backgroundColor: Hue.ground,
+            border: null,
+            transitionBetweenRoutes: false,
+            // Clear lives in the bar so it never scrolls off with the pills.
+            trailing: state.hasActiveFilters
+                ? CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(44, 44),
+                    onPressed: _clearAll,
+                    child: const Text('Clear'),
+                  )
+                : null,
+          ),
+          CupertinoSliverRefreshControl(onRefresh: controller.refresh),
+          const SliverToBoxAdapter(child: OfflineBanner()),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CupertinoSearchTextField(
+                    controller: _searchCtrl,
+                    onChanged: _onSearchChanged,
+                    onSuffixTap: () {
+                      _searchCtrl.clear();
+                      _debounce?.cancel();
+                      controller.setQuery('');
+                    },
+                    placeholder: 'Search players',
+                    backgroundColor: Hue.panel,
+                    itemColor: Hue.textMid,
+                    style: Txt.body.copyWith(fontSize: 17),
+                    placeholderStyle: Txt.body.copyWith(
+                      fontSize: 17,
+                      color: Hue.textLo,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    padding: const EdgeInsets.fromLTRB(6, 10, 6, 10),
+                  ),
+                  const SizedBox(height: 6),
+                  // Scrolls sideways so three active filters never overflow.
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    clipBehavior: Clip.none,
+                    child: Row(
+                      children: [
+                        _FilterPill(
+                          label: 'Season',
+                          value: state.season,
+                          options: filters.seasons,
+                          onChanged: controller.setSeason,
+                        ),
+                        const SizedBox(width: 8),
+                        _FilterPill(
+                          label: 'Team',
+                          value: state.team,
+                          options: filters.teams,
+                          onChanged: controller.setTeam,
+                        ),
+                        const SizedBox(width: 8),
+                        _FilterPill(
+                          label: 'Position',
+                          value: state.position,
+                          options: filters.positions,
+                          onChanged: controller.setPosition,
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (state.fromCache && state.cachedAt != null) ...[
+                    const SizedBox(height: 8),
+                    CachedCopyNote(cachedAt: state.cachedAt!),
+                  ],
+                ],
               ),
             ),
-          Expanded(
-            child: _Body(
-              state: state,
-              scroll: _scroll,
-              onRetry: controller.refresh,
-            ),
           ),
+          ..._body(state, controller),
         ],
       ),
     );
   }
-}
 
-class _SearchField extends StatelessWidget {
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
-  final VoidCallback onClear;
-  const _SearchField({
-    required this.controller,
-    required this.onChanged,
-    required this.onClear,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      onChanged: onChanged,
-      textInputAction: TextInputAction.search,
-      decoration: InputDecoration(
-        hintText: 'Search players',
-        prefixIcon: const Icon(Icons.search),
-        isDense: true,
-        filled: true,
-        suffixIcon: ValueListenableBuilder<TextEditingValue>(
-          valueListenable: controller,
-          builder: (_, value, _) => value.text.isEmpty
-              ? const SizedBox.shrink()
-              : IconButton(icon: const Icon(Icons.close), onPressed: onClear),
+  List<Widget> _body(PlayersState state, PlayersController controller) {
+    if (state.loading && state.items.isEmpty) {
+      return const [SliverToBoxAdapter(child: Loading())];
+    }
+    if (state.error != null && state.items.isEmpty) {
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: MessageState(
+            icon: CupertinoIcons.wifi_slash,
+            title: "Couldn't load players",
+            message: 'Check your connection and try again.',
+            actionLabel: 'Retry',
+            onAction: controller.refresh,
+          ),
         ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide.none,
+      ];
+    }
+    if (state.isEmpty) {
+      return const [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: MessageState(
+            icon: CupertinoIcons.search,
+            title: 'No players match',
+            message: 'Try a different name or clear your filters.',
+          ),
+        ),
+      ];
+    }
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.only(top: 6),
+        sliver: SliverList.separated(
+          itemCount: state.items.length,
+          separatorBuilder: (_, _) => const Divider(indent: 78),
+          itemBuilder: (context, i) =>
+              _PlayerRow(player: state.items[i], season: state.season),
         ),
       ),
-    );
+      SliverToBoxAdapter(child: _Footer(state: state)),
+    ];
   }
 }
 
-class _FilterBar extends StatelessWidget {
-  final FilterOptions options;
-  final String? team;
-  final String? position;
-  final ValueChanged<String?> onTeam;
-  final ValueChanged<String?> onPosition;
-  final VoidCallback? onClear;
-
-  const _FilterBar({
-    required this.options,
-    required this.team,
-    required this.position,
-    required this.onTeam,
-    required this.onPosition,
-    required this.onClear,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 38,
-      child: Row(
-        children: [
-          Expanded(
-            child: _FilterDropdown(
-              icon: Icons.groups_rounded,
-              label: 'Team',
-              value: team,
-              options: options.teams,
-              onChanged: onTeam,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: _FilterDropdown(
-              icon: Icons.sports_basketball_rounded,
-              label: 'Position',
-              value: position,
-              options: options.positions,
-              onChanged: onPosition,
-            ),
-          ),
-          if (onClear != null) ...[
-            const SizedBox(width: 6),
-            IconButton(
-              tooltip: 'Clear filters',
-              onPressed: onClear,
-              icon: const Icon(Icons.filter_alt_off_outlined),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _FilterDropdown extends StatelessWidget {
-  final IconData icon;
+class _FilterPill extends StatelessWidget {
   final String label;
   final String? value;
   final List<String> options;
   final ValueChanged<String?> onChanged;
 
-  const _FilterDropdown({
-    required this.icon,
+  const _FilterPill({
     required this.label,
     required this.value,
     required this.options,
     required this.onChanged,
   });
 
+  Future<void> _open(BuildContext context) async {
+    final picked = await showModalBottomSheet<_Choice>(
+      context: context,
+      // Sheets cover the tab bar, as on iOS.
+      useRootNavigator: true,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (_) =>
+          _OptionSheet(title: label, options: options, selected: value),
+    );
+    if (picked != null) onChanged(picked.value);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: t.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String?>(
-          isExpanded: true,
-          value: value,
-          icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
-          hint: Row(
-            children: [
-              Icon(icon, size: 16, color: t.colorScheme.onSurfaceVariant),
-              const SizedBox(width: 6),
-              Text(label, style: t.textTheme.labelLarge),
-            ],
+    final active = value != null;
+    return StatusPill(
+      active ? '$label · $value' : label,
+      icon: CupertinoIcons.chevron_down,
+      active: active,
+      onTap: options.isEmpty ? null : () => _open(context),
+    );
+  }
+}
+
+/// Wraps a sheet result so "All" (null) is distinguishable from a dismissal.
+class _Choice {
+  final String? value;
+  const _Choice(this.value);
+}
+
+class _OptionSheet extends StatelessWidget {
+  final String title;
+  final List<String> options;
+  final String? selected;
+  const _OptionSheet({
+    required this.title,
+    required this.options,
+    required this.selected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = <String?>[null, ...options];
+    return SizedBox(
+      height: MediaQuery.of(context).size.height * 0.62,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Text(title, style: Txt.title.copyWith(fontSize: 22)),
           ),
-          items: [
-            DropdownMenuItem<String?>(
-              value: null,
-              child: Text('All ${label.toLowerCase()}s'),
+          Expanded(
+            child: ListView.separated(
+              padding: const EdgeInsets.only(bottom: 24),
+              itemCount: entries.length,
+              separatorBuilder: (_, _) => const Divider(indent: 20),
+              itemBuilder: (context, i) {
+                final v = entries[i];
+                final isSel = v == selected;
+                return InkWell(
+                  onTap: () => Navigator.of(context).pop(_Choice(v)),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 14,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            v ?? 'All ${title.toLowerCase()}s',
+                            style: Txt.body.copyWith(
+                              fontSize: 17,
+                              color: isSel ? Hue.volt : Hue.textHi,
+                              fontWeight: isSel
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
+                            ),
+                          ),
+                        ),
+                        if (isSel)
+                          const Icon(
+                            CupertinoIcons.checkmark_alt,
+                            size: 20,
+                            color: Hue.volt,
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
-            ...options.map(
-              (o) => DropdownMenuItem<String?>(value: o, child: Text(o)),
-            ),
-          ],
-          onChanged: onChanged,
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _Body extends StatelessWidget {
-  final PlayersState state;
-  final ScrollController scroll;
-  final Future<void> Function() onRetry;
-  const _Body({
-    required this.state,
-    required this.scroll,
-    required this.onRetry,
-  });
+class _PlayerRow extends StatelessWidget {
+  final PlayerListItem player;
+
+  /// The active season filter: the profile opens on that season.
+  final String? season;
+  const _PlayerRow({required this.player, this.season});
 
   @override
   Widget build(BuildContext context) {
-    if (state.loading && state.items.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (state.error != null && state.items.isEmpty) {
-      return _ErrorState(onRetry: onRetry);
-    }
-    if (state.isEmpty) {
-      return const _EmptyState();
-    }
-    return RefreshIndicator(
-      onRefresh: onRetry,
-      child: ListView.separated(
-        controller: scroll,
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-        itemCount: state.items.length + 1,
-        separatorBuilder: (_, _) => const SizedBox(height: 10),
-        itemBuilder: (context, i) {
-          if (i == state.items.length) {
-            return _Footer(state: state);
-          }
-          return _PlayerCard(player: state.items[i]);
-        },
+    final meta = [
+      if (player.position != null) player.position!,
+      if (player.latestTeam != null) player.latestTeam!,
+      player.careerSpan,
+    ].join(' · ');
+    return InkWell(
+      onTap: () => context.push(
+        season == null
+            ? '/players/${player.id}'
+            : '/players/${player.id}?season=$season',
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 18, 12),
+        child: Row(
+          children: [
+            PlayerAvatar(
+              imageUrl: player.imageUrl,
+              initials: player.initials,
+              radius: 23,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    player.fullName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Txt.headline,
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    meta,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Txt.caption,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '${player.seasonCount}',
+                  style: Txt.numeralM.copyWith(fontSize: 24),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  player.seasonCount == 1 ? 'season' : 'seasons',
+                  style: Txt.caption.copyWith(color: Hue.textLo, fontSize: 12),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -308,201 +398,13 @@ class _Footer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    if (state.loadingMore) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 16),
-        child: Center(
-          child: SizedBox(
-            height: 22,
-            width: 22,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-        ),
-      );
-    }
+    if (state.loadingMore) return const Loading(padding: 20);
     return Padding(
-      padding: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 36),
       child: Center(
         child: Text(
-          '${state.total} player${state.total == 1 ? '' : 's'}',
-          style: t.textTheme.labelMedium?.copyWith(
-            color: t.colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PlayerCard extends StatelessWidget {
-  final PlayerListItem player;
-  const _PlayerCard({required this.player});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    return Card(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: () => context.push('/players/${player.id}'),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              PlayerAvatar(
-                imageUrl: player.imageUrl,
-                initials: player.initials,
-                radius: 24,
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      player.fullName,
-                      style: t.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        if (player.position != null)
-                          _Pill(text: player.position!),
-                        if (player.latestTeam != null)
-                          _Pill(text: player.latestTeam!, subtle: true),
-                        Text(
-                          '${player.careerSpan} · ${player.seasonCount} season${player.seasonCount == 1 ? '' : 's'}',
-                          style: t.textTheme.bodySmall?.copyWith(
-                            color: t.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.chevron_right, color: t.colorScheme.onSurfaceVariant),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Pill extends StatelessWidget {
-  final String text;
-  final bool subtle;
-  const _Pill({required this.text, this.subtle = false});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final bg = subtle
-        ? t.colorScheme.surfaceContainerHighest.withValues(alpha: 0.7)
-        : t.colorScheme.primary.withValues(alpha: 0.14);
-    final fg = subtle ? t.colorScheme.onSurfaceVariant : t.colorScheme.primary;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        text,
-        style: t.textTheme.labelSmall?.copyWith(
-          color: fg,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    return LayoutBuilder(
-      builder: (context, constraints) => SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: constraints.maxHeight),
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.search_off_rounded,
-                    size: 44,
-                    color: t.colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'No players match',
-                    style: t.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Try a different name or clear your filters.',
-                    style: t.textTheme.bodySmall?.copyWith(
-                      color: t.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  final Future<void> Function() onRetry;
-  const _ErrorState({required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.wifi_off_rounded,
-              size: 44,
-              color: t.colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              "Couldn't load players",
-              style: t.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-            ),
-          ],
+          '${_count.format(state.total)} player${state.total == 1 ? '' : 's'}',
+          style: Txt.caption.copyWith(color: Hue.textLo),
         ),
       ),
     );

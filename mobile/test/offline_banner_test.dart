@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -20,7 +21,7 @@ void main() {
   testWidgets('OfflineBanner shows a message when offline', (tester) async {
     await tester.pumpWidget(_wrap(const OfflineBanner(), offline: true));
     expect(find.textContaining("You're offline"), findsOneWidget);
-    expect(find.byIcon(Icons.cloud_off_rounded), findsOneWidget);
+    expect(find.byIcon(CupertinoIcons.wifi_slash), findsOneWidget);
   });
 
   testWidgets('CachedCopyNote shows a saved-copy label with age', (

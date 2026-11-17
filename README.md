@@ -142,16 +142,16 @@ records a `skipped` run and the app keeps serving historical data.
 |--------|------|-------------|
 | GET  | `/health` | Liveness check |
 | GET  | `/meta` | Row counts, season range, last sync, Sportradar status |
-| GET  | `/players` | List / search / filter players (paginated) |
-| GET  | `/players/filters` | Available team & position filter values |
-| GET  | `/players/compare` | Compare two players (`a`, `b`, `season_type`) |
+| GET  | `/players` | List / search / filter players (`q`, `team`, `position`, `season`; paginated) |
+| GET  | `/players/filters` | Available team, position & season filter values |
+| GET  | `/players/compare` | Compare two players (`a`, `b`, `season_type`); add `a_season` / `b_season` (e.g. `2015-16`) to compare single seasons instead of careers |
 | GET  | `/players/{id}` | Player profile + season statistics |
 | GET  | `/sync/status` | Sync configuration & recent runs (no key leaked) |
 | POST | `/sync/sportradar` | Trigger a Sportradar sync (token-guarded) |
 
 ### Tests
 ```bash
-cd backend && PYTHONPATH=. python3 -m pytest -q   # 60 tests
+cd backend && PYTHONPATH=. python3 -m pytest -q   # 71 tests
 ```
 Tests run on in-memory SQLite — no running Postgres required, and no external
 network calls (the Sportradar client is exercised with a mock transport).
@@ -231,7 +231,7 @@ uses `localhost`. Override with `--dart-define=API_BASE_URL=...` for a physical
 device on your LAN.
 
 ```bash
-flutter test       # 24 tests
+flutter test       # 39 tests
 flutter analyze    # no issues
 ```
 

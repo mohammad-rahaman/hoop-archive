@@ -1,11 +1,16 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/models.dart';
 import '../../core/theme.dart';
 import '../../core/widgets/offline_banner.dart';
+import '../../core/widgets/ui.dart';
+
+final _count = NumberFormat.decimalPattern('en_US');
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -14,95 +19,49 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final meta = ref.watch(metaProvider);
     return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            const OfflineBanner(),
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: () => ref.refresh(metaProvider.future),
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-                  children: [
-                    const _Header(),
-                    const SizedBox(height: 20),
-                    meta.when(
-                      loading: () => const _OverviewLoading(),
-                      error: (err, _) => _OverviewError(
-                        onRetry: () => ref.invalidate(metaProvider),
-                      ),
-                      data: (m) => _Overview(meta: m),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: () => context.push('/players'),
-                        icon: const Icon(Icons.search),
-                        label: const Text('Browse players'),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: () => context.push('/compare'),
-                        icon: const Icon(Icons.compare_arrows_rounded),
-                        label: const Text('Compare players'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+      body: CustomScrollView(
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
         ),
-      ),
-    );
-  }
-}
-
-class _Header extends StatelessWidget {
-  const _Header();
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    return Row(
-      children: [
-        Container(
-          height: 46,
-          width: 46,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [AppTheme.brand, AppTheme.brandDeep],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(14),
+        slivers: [
+          const CupertinoSliverNavigationBar(
+            largeTitle: Text('Hoop Archive'),
+            backgroundColor: Hue.ground,
+            border: null,
+            transitionBetweenRoutes: false,
           ),
-          child: const Icon(Icons.sports_basketball, color: Colors.white),
-        ),
-        const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Hoop Archive',
-              style: t.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w900,
-                letterSpacing: -0.6,
-              ),
+          CupertinoSliverRefreshControl(
+            onRefresh: () => ref.refresh(metaProvider.future),
+          ),
+          const SliverToBoxAdapter(child: OfflineBanner()),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+            sliver: SliverList.list(
+              children: [
+                meta.when(
+                  loading: () => const Panel(child: Loading(padding: 72)),
+                  error: (_, _) => Panel(
+                    child: MessageState(
+                      icon: CupertinoIcons.wifi_slash,
+                      title: "Can't reach the server",
+                      message:
+                          'Start the backend (uvicorn app.main:app) and make '
+                          'sure the API URL is reachable from this device.',
+                      actionLabel: 'Retry',
+                      onAction: () => ref.invalidate(metaProvider),
+                    ),
+                  ),
+                  data: (m) => _Overview(meta: m),
+                ),
+                const SizedBox(height: 14),
+                _EntryRows(playerCount: meta.valueOrNull?.players),
+                const SizedBox(height: 32),
+                if (meta.valueOrNull != null) _Sources(meta: meta.value!),
+              ],
             ),
-            Text(
-              'NBA player analytics · 1979 → today',
-              style: t.textTheme.bodySmall?.copyWith(
-                color: t.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -113,69 +72,261 @@ class _Overview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+    final range = meta.seasonYearRange;
+    final hasRange = range != null && range.length == 2;
+    return Panel(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 22),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Reads as a phrase: "3,275 players".
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(_count.format(meta.players), style: Txt.numeralXL),
+                const SizedBox(width: 10),
+                Text(
+                  'players',
+                  style: Txt.title.copyWith(
+                    color: Hue.textMid,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (hasRange) ...[
+            const SizedBox(height: 26),
+            _SeasonRuler(first: range[0], last: range[1]),
+          ],
+          const SizedBox(height: 22),
+          const Divider(),
+          const SizedBox(height: 18),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Figure(
+                value: _count.format(meta.seasons),
+                label: 'seasons',
+                tracked: false,
+              ),
+              Figure(
+                value: _count.format(meta.playerSeasonStats),
+                label: 'stat lines',
+                tracked: false,
+              ),
+              Figure(
+                value: _count.format(meta.teams),
+                label: 'teams',
+                tracked: false,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One tick per season in the archive, decades marked taller: the span of
+/// the data, drawn at its true length.
+class _SeasonRuler extends StatelessWidget {
+  final int first;
+  final int last;
+  const _SeasonRuler({required this.first, required this.last});
+
+  @override
+  Widget build(BuildContext context) {
+    final n = last - first + 1;
+    return Semantics(
+      label: '$n seasons, $first to ${last + 1}',
+      child: ExcludeSemantics(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Icon(Icons.check_circle, size: 16, color: t.colorScheme.secondary),
-            const SizedBox(width: 6),
-            Text(
-              'Connected to backend',
-              style: t.textTheme.labelMedium?.copyWith(
-                color: t.colorScheme.secondary,
+            SizedBox(
+              height: 18,
+              child: CustomPaint(
+                painter: _RulerPainter(first: first, count: n),
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          childAspectRatio: 1.7,
-          children: [
-            _StatTile(label: 'Players', value: '${meta.players}'),
-            _StatTile(label: 'Seasons', value: '${meta.seasons}'),
-            _StatTile(label: 'Stat lines', value: '${meta.playerSeasonStats}'),
-            _StatTile(label: 'Season span', value: meta.seasonRangeLabel),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            _SourceChip(
-              icon: Icons.storage_rounded,
-              label: meta.lastSync == null
-                  ? 'No data yet'
-                  : [
-                      meta.lastSync!.providerLabel,
-                      if (meta.lastSync!.updatedLabel != null)
-                        meta.lastSync!.updatedLabel!,
-                    ].join(' · '),
-            ),
-            _SourceChip(
-              icon: meta.sportradarConfigured
-                  ? Icons.cloud_done_rounded
-                  : Icons.cloud_off_rounded,
-              label: meta.sportradarConfigured
-                  ? 'Live data: Sportradar'
-                  : 'Live data: not configured',
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('$first', style: Txt.caption.copyWith(fontSize: 12)),
+                Text('${last + 1}', style: Txt.caption.copyWith(fontSize: 12)),
+              ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RulerPainter extends CustomPainter {
+  final int first;
+  final int count;
+  _RulerPainter({required this.first, required this.count});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (count < 1) return;
+    final minor = Paint()
+      ..color = Hue.line
+      ..strokeWidth = 1;
+    final major = Paint()
+      ..color = Hue.textHi
+      ..strokeWidth = 1.5;
+    final edge = Paint()
+      ..color = Hue.volt
+      ..strokeWidth = 2;
+    final step = count == 1 ? 0.0 : (size.width - 2) / (count - 1);
+    for (var i = 0; i < count; i++) {
+      final x = 1 + step * i;
+      final year = first + i;
+      final isEdge = i == 0 || i == count - 1;
+      final isDecade = year % 10 == 0;
+      final h = isEdge
+          ? size.height
+          : isDecade
+          ? size.height * 0.72
+          : size.height * 0.4;
+      canvas.drawLine(
+        Offset(x, size.height),
+        Offset(x, size.height - h),
+        isEdge ? edge : (isDecade ? major : minor),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RulerPainter old) =>
+      old.first != first || old.count != count;
+}
+
+class _EntryRows extends StatelessWidget {
+  final int? playerCount;
+  const _EntryRows({required this.playerCount});
+
+  @override
+  Widget build(BuildContext context) {
+    final search = playerCount == null
+        ? 'Search players'
+        : 'Search ${_count.format(playerCount)} players';
+    return Panel(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          _EntryRow(
+            icon: CupertinoIcons.search,
+            title: search,
+            subtitle: 'By name, team, or position',
+            onTap: () => context.go('/players'),
+          ),
+          const Divider(indent: 64),
+          _EntryRow(
+            icon: CupertinoIcons.arrow_right_arrow_left,
+            title: 'Compare two players',
+            subtitle: 'Career lines, metric by metric',
+            onTap: () => context.go('/compare'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EntryRow extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  const _EntryRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        child: Row(
+          children: [
+            SizedBox(width: 30, child: Icon(icon, size: 21, color: Hue.textHi)),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: Txt.headline),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: Txt.caption),
+                ],
+              ),
+            ),
+            const Icon(
+              CupertinoIcons.chevron_right,
+              size: 16,
+              color: Hue.textLo,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Sources extends StatelessWidget {
+  final MetaInfo meta;
+  const _Sources({required this.meta});
+
+  @override
+  Widget build(BuildContext context) {
+    final sync = meta.lastSync;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SectionHeading('Data sources'),
+        Panel(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              _SourceRow(
+                live: sync != null,
+                title: sync?.providerLabel ?? 'No data yet',
+                detail:
+                    sync?.updatedLabel ??
+                    (sync == null ? 'Run an ingest' : '—'),
+              ),
+              const Divider(indent: 44),
+              _SourceRow(
+                live: meta.sportradarConfigured,
+                title: 'Current season',
+                detail: meta.sportradarConfigured
+                    ? 'Sportradar'
+                    : 'Not configured',
+              ),
+            ],
+          ),
         ),
         if (!meta.sportradarConfigured) ...[
-          const SizedBox(height: 8),
-          Text(
-            'Showing historical data. Add a Sportradar key on the backend to '
-            'enable current-season sync.',
-            style: t.textTheme.bodySmall?.copyWith(
-              color: t.colorScheme.onSurfaceVariant,
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              'Showing historical data. Add a Sportradar key on the backend '
+              'to enable current-season sync.',
+              style: Txt.caption.copyWith(color: Hue.textLo),
             ),
           ),
         ],
@@ -184,143 +335,37 @@ class _Overview extends StatelessWidget {
   }
 }
 
-class _StatTile extends StatelessWidget {
-  final String label;
-  final String value;
-  const _StatTile({required this.label, required this.value});
+/// A source line. Live sources get a filled volt dot, inactive ones a hollow
+/// ring, and the detail text says the same thing in words.
+class _SourceRow extends StatelessWidget {
+  final bool live;
+  final String title;
+  final String detail;
+  const _SourceRow({
+    required this.live,
+    required this.title,
+    required this.detail,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              value,
-              style: t.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label.toUpperCase(),
-              style: t.textTheme.labelSmall?.copyWith(
-                color: t.colorScheme.onSurfaceVariant,
-                letterSpacing: 0.6,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SourceChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  const _SourceChip({required this.icon, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: t.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(10),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 15, color: t.colorScheme.onSurfaceVariant),
-          const SizedBox(width: 6),
-          Text(label, style: t.textTheme.labelMedium),
-        ],
-      ),
-    );
-  }
-}
-
-class _OverviewLoading extends StatelessWidget {
-  const _OverviewLoading();
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: 1.7,
-      children: List.generate(
-        4,
-        (_) => Card(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: SizedBox(
-                  height: 18,
-                  width: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
+          Container(
+            width: 9,
+            height: 9,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: live ? Hue.volt : null,
+              border: live ? null : Border.all(color: Hue.textLo, width: 1.5),
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _OverviewError extends StatelessWidget {
-  final VoidCallback onRetry;
-  const _OverviewError({required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Icon(
-              Icons.wifi_off_rounded,
-              size: 36,
-              color: t.colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              "Can't reach the server",
-              style: t.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Start the backend (uvicorn app.main:app) and make sure the API '
-              'URL is reachable from this device, then retry.',
-              textAlign: TextAlign.center,
-              style: t.textTheme.bodySmall?.copyWith(
-                color: t.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-            ),
-          ],
-        ),
+          const SizedBox(width: 17),
+          Expanded(child: Text(title, style: Txt.body)),
+          Text(detail, style: Txt.caption),
+        ],
       ),
     );
   }

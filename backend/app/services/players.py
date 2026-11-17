@@ -35,7 +35,13 @@ _STAT_FIELDS = [
 _CAREER_FIELDS = _STAT_FIELDS
 
 
-def _apply_filters(stmt, q: Optional[str], team: Optional[str], position: Optional[str]):
+def _apply_filters(
+    stmt,
+    q: Optional[str],
+    team: Optional[str],
+    position: Optional[str],
+    season: Optional[str] = None,
+):
     if q:
         nq = normalize_name_key(q)
         if nq:
@@ -53,6 +59,18 @@ def _apply_filters(stmt, q: Optional[str], team: Optional[str], position: Option
             .exists()
         )
         stmt = stmt.where(team_exists)
+    if season:
+        # Players with at least one stat line (any split) in that season.
+        season_exists = (
+            select(PlayerSeasonStats.id)
+            .join(Season, Season.id == PlayerSeasonStats.season_id)
+            .where(
+                PlayerSeasonStats.player_id == Player.id,
+                Season.label == season,
+            )
+            .exists()
+        )
+        stmt = stmt.where(season_exists)
     return stmt
 
 
@@ -63,13 +81,14 @@ def list_players(
     position: Optional[str] = None,
     page: int = 1,
     page_size: int = 25,
+    season: Optional[str] = None,
 ) -> Tuple[int, List[PlayerListItem]]:
-    base = _apply_filters(select(Player.id), q, team, position)
+    base = _apply_filters(select(Player.id), q, team, position, season)
 
     total = db.scalar(select(func.count()).select_from(base.subquery())) or 0
 
     page_stmt = (
-        _apply_filters(select(Player), q, team, position)
+        _apply_filters(select(Player), q, team, position, season)
         .order_by(Player.full_name.asc(), Player.id.asc())
         .limit(page_size)
         .offset((page - 1) * page_size)
@@ -191,10 +210,16 @@ def get_player_detail(db: Session, player_id: int) -> Optional[PlayerDetail]:
     )
 
 
-def _career_season_rows(db: Session, player_id: int, season_type: SeasonType):
+def _career_season_rows(
+    db: Session,
+    player_id: int,
+    season_type: SeasonType,
+    season: Optional[str] = None,
+):
     """Season rows (one per team-stint) for a player in one split, as dicts
-    ready for :func:`aggregate_career`."""
-    rows = db.execute(
+    ready for :func:`aggregate_career`. With ``season`` set, only that season's
+    rows are returned, so the "career" line becomes that single season."""
+    stmt = (
         select(PlayerSeasonStats, Season.year_start, Team.abbreviation)
         .join(Season, Season.id == PlayerSeasonStats.season_id)
         .join(Team, Team.id == PlayerSeasonStats.team_id)
@@ -202,7 +227,10 @@ def _career_season_rows(db: Session, player_id: int, season_type: SeasonType):
             PlayerSeasonStats.player_id == player_id,
             PlayerSeasonStats.season_type == season_type,
         )
-    ).all()
+    )
+    if season:
+        stmt = stmt.where(Season.label == season)
+    rows = db.execute(stmt).all()
     out = []
     for stat, year_start, abbr in rows:
         row = {"year_start": year_start, "team": abbr, "gp": stat.gp}
@@ -212,7 +240,31 @@ def _career_season_rows(db: Session, player_id: int, season_type: SeasonType):
     return out
 
 
-def _comparison_player(db: Session, player_id: int):
+def _season_team(
+    db: Session, player_id: int, season: str, season_type: SeasonType
+) -> Optional[str]:
+    """Team for one season in one split: "TOT" when the player was traded."""
+    abbrs = db.scalars(
+        select(Team.abbreviation)
+        .join(PlayerSeasonStats, PlayerSeasonStats.team_id == Team.id)
+        .join(Season, Season.id == PlayerSeasonStats.season_id)
+        .where(
+            PlayerSeasonStats.player_id == player_id,
+            PlayerSeasonStats.season_type == season_type,
+            Season.label == season,
+        )
+    ).all()
+    if not abbrs:
+        return None
+    return TOT if TOT in abbrs else abbrs[0]
+
+
+def _comparison_player(
+    db: Session,
+    player_id: int,
+    season: Optional[str] = None,
+    season_type: SeasonType = SeasonType.REGULAR,
+):
     player = db.get(Player, player_id)
     if player is None:
         return None
@@ -233,21 +285,34 @@ def _comparison_player(db: Session, player_id: int):
         last_year=max(years) if years else None,
         season_count=len({y for y, _ in rows}),
         image_url=headshot_url(player.external_ids),
+        season=season,
+        season_team=(
+            _season_team(db, player_id, season, season_type) if season else None
+        ),
     )
 
 
 def get_comparison(
-    db: Session, id_a: int, id_b: int, season_type: SeasonType
+    db: Session,
+    id_a: int,
+    id_b: int,
+    season_type: SeasonType,
+    a_season: Optional[str] = None,
+    b_season: Optional[str] = None,
 ) -> Optional[PlayerComparison]:
-    """Compare two players' career lines for one split, or None if either id is
-    unknown."""
-    a = _comparison_player(db, id_a)
-    b = _comparison_player(db, id_b)
+    """Compare two players for one split, or None if either id is unknown.
+
+    Each side is a career line by default, or a single season when its
+    ``*_season`` label is given (e.g. one player's 2015-16 against another's
+    2020-21). A season with no rows in this split compares as unavailable,
+    never as zero."""
+    a = _comparison_player(db, id_a, a_season, season_type)
+    b = _comparison_player(db, id_b, b_season, season_type)
     if a is None or b is None:
         return None
 
-    stats_a = aggregate_career(_career_season_rows(db, id_a, season_type))
-    stats_b = aggregate_career(_career_season_rows(db, id_b, season_type))
+    stats_a = aggregate_career(_career_season_rows(db, id_a, season_type, a_season))
+    stats_b = aggregate_career(_career_season_rows(db, id_b, season_type, b_season))
     keys = [m.key for m in METRICS]
     comparisons = compare_players(stats_a, stats_b, keys)
 
@@ -288,4 +353,13 @@ def filter_options(db: Session) -> FilterOptions:
         .distinct()
         .order_by(Player.position)
     ).all()
-    return FilterOptions(teams=list(teams), positions=[p for p in positions if p])
+    seasons = db.scalars(
+        select(Season.label)
+        .where(select(PlayerSeasonStats.id).where(PlayerSeasonStats.season_id == Season.id).exists())
+        .order_by(Season.year_start.desc())
+    ).all()
+    return FilterOptions(
+        teams=list(teams),
+        positions=[p for p in positions if p],
+        seasons=list(seasons),
+    )

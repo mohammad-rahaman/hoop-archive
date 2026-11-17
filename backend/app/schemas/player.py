@@ -70,6 +70,8 @@ class PlayerDetail(BaseModel):
 class FilterOptions(BaseModel):
     teams: List[str]
     positions: List[str]
+    # Season labels with recorded stats, newest first, e.g. "2020-21".
+    seasons: List[str] = []
 
 
 class ComparisonPlayer(BaseModel):
@@ -81,6 +83,10 @@ class ComparisonPlayer(BaseModel):
     last_year: Optional[int] = None
     season_count: int = 0
     image_url: Optional[str] = None
+    # Set when this side compares one season instead of the career.
+    season: Optional[str] = None
+    # Team for that season ("TOT" when split across teams), or None.
+    season_team: Optional[str] = None
 
 
 class MetricComparisonRow(BaseModel):

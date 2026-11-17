@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/theme.dart';
+
 /// Shown for unknown or malformed routes (e.g. a stale deep link). Gives the
 /// user a clear way back rather than a raw router error page.
 class NotFoundScreen extends StatelessWidget {
@@ -9,42 +11,39 @@ class NotFoundScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Not found')),
-      body: Center(
+      body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(32),
+          padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                Icons.explore_off_rounded,
-                size: 48,
-                color: t.colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(height: 14),
+              Text('404', style: Txt.numeralXL.copyWith(color: Hue.textLo)),
+              const SizedBox(height: 18),
+              Text("This page doesn't exist", style: Txt.title),
+              const SizedBox(height: 8),
               Text(
-                "This page doesn't exist",
-                style: t.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                'The link may be out of date. Everything in the archive is '
+                'still a tap away.',
+                style: Txt.caption.copyWith(fontSize: 15),
               ),
               if (location != null) ...[
-                const SizedBox(height: 6),
+                const SizedBox(height: 14),
                 Text(
                   location!,
-                  textAlign: TextAlign.center,
-                  style: t.textTheme.bodySmall?.copyWith(
-                    color: t.colorScheme.onSurfaceVariant,
+                  style: Txt.caption.copyWith(
+                    color: Hue.textLo,
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
               ],
-              const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: () => context.go('/'),
-                icon: const Icon(Icons.home_rounded),
-                label: const Text('Go home'),
+              const Spacer(),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => context.go('/'),
+                  child: const Text('Go home'),
+                ),
               ),
             ],
           ),

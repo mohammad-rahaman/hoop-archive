@@ -110,3 +110,95 @@ def test_invalid_season_type_rejected(client):
         "/players/compare", params={"a": a, "b": b, "season_type": "preseason"}
     )
     assert r.status_code == 422
+
+
+# --- Season-vs-season comparison ---------------------------------------------
+
+
+def test_compare_one_season_against_another(client):
+    # Marcus Vale's 1997-98 against Priya Anand's 2020-21: each side is that
+    # single season's line, not a career average.
+    a = _player_id(client, "marcus")
+    b = _player_id(client, "priya")
+    body = client.get(
+        "/players/compare",
+        params={"a": a, "b": b, "a_season": "1997-98", "b_season": "2020-21"},
+    ).json()
+    assert body["a"]["season"] == "1997-98"
+    assert body["b"]["season"] == "2020-21"
+    assert body["a"]["season_team"] == "CHI"
+    assert body["b"]["season_team"] == "GSW"
+    m = _metrics(body)
+    assert m["pts"]["a_value"] == pytest.approx(25.1)
+    assert m["pts"]["b_value"] == pytest.approx(21.3)
+    assert m["gp"]["a_value"] == 80  # that season's games, not the career total
+    # Single-season shooting uses the recorded rate exactly.
+    assert m["fg_pct"]["a_value"] == pytest.approx(0.476)
+    assert m["pts"]["leader"] == "a"
+
+
+def test_season_on_one_side_career_on_the_other(client):
+    a = _player_id(client, "marcus")
+    b = _player_id(client, "dante")
+    body = client.get(
+        "/players/compare", params={"a": a, "b": b, "b_season": "1996-97"}
+    ).json()
+    m = _metrics(body)
+    assert body["a"]["season"] is None  # career
+    assert m["pts"]["a_value"] == pytest.approx(
+        (22.4 * 78 + 25.1 * 80 + 21.0 * 50) / 208, abs=0.01
+    )
+    assert m["pts"]["b_value"] == pytest.approx(26.2)
+
+
+def test_traded_season_uses_tot_line_not_a_sum(client):
+    # Eli Marsh split 2015-16 between CHI and NYK; the TOT row is the season.
+    a = _player_id(client, "eli")
+    b = _player_id(client, "priya")
+    body = client.get(
+        "/players/compare",
+        params={"a": a, "b": b, "a_season": "2015-16", "b_season": "2020-21"},
+    ).json()
+    assert body["a"]["season_team"] == "TOT"
+    m = _metrics(body)
+    assert m["pts"]["a_value"] == pytest.approx(15.3)
+    assert m["gp"]["a_value"] == 74
+
+
+def test_season_the_player_never_played_is_unavailable_not_zero(client):
+    a = _player_id(client, "marcus")
+    b = _player_id(client, "priya")
+    body = client.get(
+        "/players/compare",
+        params={"a": a, "b": b, "a_season": "2020-21", "b_season": "2020-21"},
+    ).json()
+    assert all(not m["available"] for m in body["metrics"])
+    assert all(m["a_value"] is None for m in body["metrics"])
+    assert body["a_wins"] == 0 and body["b_wins"] == 0
+
+
+def test_same_player_two_seasons_allowed(client):
+    a = _player_id(client, "marcus")
+    r = client.get(
+        "/players/compare",
+        params={"a": a, "b": a, "a_season": "1996-97", "b_season": "1997-98"},
+    )
+    assert r.status_code == 200
+    m = _metrics(r.json())
+    assert m["pts"]["leader"] == "b"  # 25.1 beats 22.4
+
+
+def test_same_player_same_season_rejected(client):
+    a = _player_id(client, "marcus")
+    r = client.get(
+        "/players/compare",
+        params={"a": a, "b": a, "a_season": "1997-98", "b_season": "1997-98"},
+    )
+    assert r.status_code == 400
+
+
+def test_malformed_season_rejected(client):
+    a = _player_id(client, "marcus")
+    b = _player_id(client, "dante")
+    r = client.get("/players/compare", params={"a": a, "b": b, "a_season": "2016"})
+    assert r.status_code == 422

@@ -40,18 +40,25 @@ class ApiClient {
   static String metaKey() => 'meta';
   static String filtersKey() => 'filters';
   static String playerKey(int id) => 'player:$id';
-  static String comparisonKey(int a, int b, String seasonType) =>
-      'compare:$a:$b:$seasonType';
+  static String comparisonKey(
+    int a,
+    int b,
+    String seasonType, {
+    String? aSeason,
+    String? bSeason,
+  }) =>
+      'compare:$a:$b:$seasonType:${aSeason ?? 'career'}:${bSeason ?? 'career'}';
 
   static String playersKey({
     String? q,
     String? team,
     String? position,
+    String? season,
     int page = 1,
     int pageSize = 25,
   }) =>
       'players:q=${q ?? ''}&team=${team ?? ''}&position=${position ?? ''}'
-      '&page=$page&size=$pageSize';
+      '&season=${season ?? ''}&page=$page&size=$pageSize';
 
   /// Fetch + parse, routed through the cache when one is configured.
   Future<T> _load<T>(
@@ -74,6 +81,7 @@ class ApiClient {
     String? q,
     String? team,
     String? position,
+    String? season,
     int page = 1,
     int pageSize = 25,
   }) => _load(
@@ -81,6 +89,7 @@ class ApiClient {
       q: q,
       team: team,
       position: position,
+      season: season,
       page: page,
       pageSize: pageSize,
     ),
@@ -90,6 +99,7 @@ class ApiClient {
         if (q != null && q.isNotEmpty) 'q': q,
         'team': ?team,
         'position': ?position,
+        'season': ?season,
         'page': page,
         'page_size': pageSize,
       },
@@ -109,36 +119,57 @@ class ApiClient {
     (b) => PlayerDetail.fromJson(b as Map<String, dynamic>),
   );
 
+  /// Compares two players. Each side is a career line unless its season
+  /// ([aSeason] / [bSeason], e.g. "2015-16") is given.
   Future<PlayerComparison> fetchComparison({
     required int a,
     required int b,
     String seasonType = 'regular',
+    String? aSeason,
+    String? bSeason,
   }) => _load(
-    comparisonKey(a, b, seasonType),
+    comparisonKey(a, b, seasonType, aSeason: aSeason, bSeason: bSeason),
     () async => (await _dio.get(
       '/players/compare',
-      queryParameters: {'a': a, 'b': b, 'season_type': seasonType},
+      queryParameters: {
+        'a': a,
+        'b': b,
+        'season_type': seasonType,
+        'a_season': ?aSeason,
+        'b_season': ?bSeason,
+      },
     )).data,
     (body) => PlayerComparison.fromJson(body as Map<String, dynamic>),
   );
 }
 
-/// Keys a comparison request: the two player ids plus the season split.
+/// Keys a comparison request: the two player ids, the split, and an optional
+/// season per side (null = career).
 class CompareArgs {
   final int a;
   final int b;
   final String seasonType;
-  const CompareArgs(this.a, this.b, this.seasonType);
+  final String? aSeason;
+  final String? bSeason;
+  const CompareArgs(
+    this.a,
+    this.b,
+    this.seasonType, {
+    this.aSeason,
+    this.bSeason,
+  });
 
   @override
   bool operator ==(Object other) =>
       other is CompareArgs &&
       other.a == a &&
       other.b == b &&
-      other.seasonType == seasonType;
+      other.seasonType == seasonType &&
+      other.aSeason == aSeason &&
+      other.bSeason == bSeason;
 
   @override
-  int get hashCode => Object.hash(a, b, seasonType);
+  int get hashCode => Object.hash(a, b, seasonType, aSeason, bSeason);
 }
 
 /// Persistent cache store. One instance per app; lazily opens SharedPreferences.
@@ -173,6 +204,12 @@ final comparisonProvider = FutureProvider.family<PlayerComparison, CompareArgs>(
   (ref, args) async {
     return ref
         .watch(apiClientProvider)
-        .fetchComparison(a: args.a, b: args.b, seasonType: args.seasonType);
+        .fetchComparison(
+          a: args.a,
+          b: args.b,
+          seasonType: args.seasonType,
+          aSeason: args.aSeason,
+          bSeason: args.bSeason,
+        );
   },
 );

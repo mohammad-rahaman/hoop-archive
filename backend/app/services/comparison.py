@@ -159,7 +159,12 @@ def aggregate_career(rows: Sequence[SeasonRow]) -> Dict[str, Optional[float]]:
         career[key] = _weighted_average(seasons, key)
     career["gp"] = _sum(seasons, "gp")
     for pct_key, makes_key, att_key in _SHOOTING:
-        career[pct_key] = _career_shooting(seasons, pct_key, makes_key, att_key)
+        if len(seasons) == 1 and seasons[0].get(pct_key) is not None:
+            # A single season: the recorded rate is exact, whereas rebuilding it
+            # from rounded per-game makes/attempts would drift slightly.
+            career[pct_key] = float(seasons[0][pct_key])
+        else:
+            career[pct_key] = _career_shooting(seasons, pct_key, makes_key, att_key)
     return career
 
 

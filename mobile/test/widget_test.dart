@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hoop_archive/core/api/api_client.dart';
@@ -16,18 +17,23 @@ void main() {
       lastSync: null,
     );
 
+    tester.view.physicalSize = const Size(1179, 2556); // iPhone, 3x
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [
-          metaProvider.overrideWith((ref) async => fakeMeta),
-        ],
+        overrides: [metaProvider.overrideWith((ref) async => fakeMeta)],
         child: const HoopArchiveApp(),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Hoop Archive'), findsOneWidget);
-    expect(find.text('42'), findsOneWidget); // players stat tile
-    expect(find.text('1980 – 2021'), findsOneWidget); // season span label
+    expect(find.text('Hoop Archive'), findsWidgets); // large + collapsed title
+    expect(find.text('42'), findsOneWidget); // players figure
+    expect(find.text('Search 42 players'), findsOneWidget);
+    expect(find.text('Not configured'), findsOneWidget); // live data honest
+    expect(find.text('1980'), findsOneWidget); // season ruler ends
+    expect(find.text('2021'), findsOneWidget);
   });
 }

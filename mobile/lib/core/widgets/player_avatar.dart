@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../theme.dart';
+
 /// A circular avatar that renders a player's official headshot when available,
-/// with an automatic, graceful fallback to player initials on a styled gradient
-/// background whenever the image is missing, loading, or offline.
+/// falling back to initials on a flat panel disc whenever the image is
+/// missing, loading, or offline.
 class PlayerAvatar extends StatelessWidget {
   final String? imageUrl;
   final String initials;
@@ -20,70 +22,61 @@ class PlayerAvatar extends StatelessWidget {
     this.backgroundColor,
     this.foregroundColor,
     this.borderColor,
-    this.borderWidth = 1.5,
+    this.borderWidth = 1,
   });
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final bg = backgroundColor ?? theme.colorScheme.primary.withValues(alpha: 0.15);
-    final fg = foregroundColor ?? theme.colorScheme.primary;
+    final bg = backgroundColor ?? Hue.raised;
+    final fg = foregroundColor ?? Hue.textMid;
     final size = radius * 2;
 
     Widget fallbackAvatar() => Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: bg,
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            initials,
-            style: TextStyle(
-              fontSize: radius * 0.72,
-              fontWeight: FontWeight.w800,
-              color: fg,
-              letterSpacing: -0.5,
-            ),
-          ),
-        );
+      width: size,
+      height: size,
+      decoration: BoxDecoration(shape: BoxShape.circle, color: bg),
+      alignment: Alignment.center,
+      child: Text(
+        initials,
+        style: TextStyle(
+          fontSize: radius * 0.66,
+          fontWeight: FontWeight.w700,
+          color: fg,
+          letterSpacing: -0.3,
+        ),
+      ),
+    );
 
     final hasUrl = imageUrl != null && imageUrl!.trim().isNotEmpty;
 
-    Widget content;
-    if (!hasUrl) {
-      content = fallbackAvatar();
-    } else {
-      content = ClipOval(
-        child: SizedBox(
-          width: size,
-          height: size,
-          child: Image.network(
-            imageUrl!,
-            fit: BoxFit.cover,
-            alignment: Alignment.topCenter,
-            errorBuilder: (_, _, _) => fallbackAvatar(),
-            loadingBuilder: (context, child, loadingProgress) {
-              if (loadingProgress == null) return child;
-              return fallbackAvatar();
-            },
-          ),
-        ),
-      );
-    }
+    final Widget content = !hasUrl
+        ? fallbackAvatar()
+        : ClipOval(
+            child: Container(
+              width: size,
+              height: size,
+              color: bg,
+              child: Image.network(
+                imageUrl!,
+                fit: BoxFit.cover,
+                alignment: Alignment.topCenter,
+                errorBuilder: (_, _, _) => fallbackAvatar(),
+                // Initials stay up until the first real frame paints, so a
+                // slow or offline image never leaves an empty disc.
+                frameBuilder: (context, child, frame, sync) =>
+                    frame == null && !sync ? fallbackAvatar() : child,
+              ),
+            ),
+          );
 
-    if (borderColor != null) {
-      return Container(
-        padding: EdgeInsets.all(borderWidth),
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(color: borderColor!, width: borderWidth),
-        ),
-        child: content,
-      );
-    }
-
-    return content;
+    final ring = borderColor ?? Hue.hairlineStrong;
+    return Container(
+      padding: EdgeInsets.all(borderWidth),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: ring, width: borderWidth),
+      ),
+      child: content,
+    );
   }
 }

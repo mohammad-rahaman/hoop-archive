@@ -33,6 +33,16 @@ class _FakeApi extends ApiClient {
           fgPct: 0.476,
         ),
         SeasonStatRow(
+          season: '1996-97',
+          yearStart: 1996,
+          seasonType: 'regular',
+          team: 'CHI',
+          statMode: 'per_game',
+          gp: 74,
+          pts: 19.4,
+          fgPct: 0.451,
+        ),
+        SeasonStatRow(
           season: '1997-98',
           yearStart: 1997,
           seasonType: 'playoff',
@@ -47,27 +57,97 @@ class _FakeApi extends ApiClient {
   }
 }
 
+Future<void> _pump(WidgetTester tester) async {
+  tester.view.physicalSize = const Size(1179, 2556);
+  tester.view.devicePixelRatio = 3;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [apiClientProvider.overrideWithValue(_FakeApi())],
+      child: const MaterialApp(home: ProfileScreen(playerId: 1)),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
 void main() {
-  testWidgets('Profile shows header, regular stats, and toggles playoffs',
-      (tester) async {
+  testWidgets('Profile shows header and the latest regular season', (
+    tester,
+  ) async {
+    await _pump(tester);
+
+    expect(find.text('Marcus Vale'), findsWidgets); // nav bar + header
+    expect(find.textContaining('3 seasons'), findsOneWidget);
+    // Hero numeral and the season rail both show the latest PTS.
+    expect(find.text('25.1'), findsWidgets);
+    // Shooting meter scales the stored fraction to a percentage.
+    expect(find.text('47.6%'), findsOneWidget);
+    // A stat with no value reads "—", never 0.
+    expect(find.text('—'), findsWidgets);
+    expect(find.text('0.0%'), findsNothing);
+    // Playoff numbers stay out of the regular-season view.
+    expect(find.text('28.7'), findsNothing);
+  });
+
+  testWidgets('Selecting an older season in the rail updates the hero', (
+    tester,
+  ) async {
+    await _pump(tester);
+    await tester.scrollUntilVisible(
+      find.text('1996-97'),
+      200,
+      scrollable: find
+          .ancestor(
+            of: find.text('Shooting'),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.ensureVisible(find.text('1996-97'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('1996-97'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('GP'), findsOneWidget); // full stat line expanded
+    // Scroll back up: shooting now follows the selected season.
+    await tester.scrollUntilVisible(
+      find.text('45.1%'),
+      -200,
+      scrollable: find
+          .ancestor(of: find.text('GP'), matching: find.byType(Scrollable))
+          .first,
+    );
+    expect(find.text('45.1%'), findsOneWidget);
+  });
+
+  testWidgets('Playoffs toggle swaps to the playoff split only', (
+    tester,
+  ) async {
+    await _pump(tester);
+    await tester.tap(find.text('Playoffs'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('28.7'), findsWidgets);
+    expect(find.text('25.1'), findsNothing);
+    expect(find.textContaining('One playoff run on record'), findsOneWidget);
+  });
+
+  testWidgets('Opens on a requested season (from a season-filtered list)', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1179, 2556);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [apiClientProvider.overrideWithValue(_FakeApi())],
-        child: const MaterialApp(home: ProfileScreen(playerId: 1)),
+        child: const MaterialApp(
+          home: ProfileScreen(playerId: 1, initialSeason: '1996-97'),
+        ),
       ),
     );
     await tester.pumpAndSettle();
-
-    expect(find.text('Marcus Vale'), findsWidgets); // app bar + header
-    expect(find.textContaining('3 seasons'), findsOneWidget); // career span line
-    // Regular-season PTS shown; percentage scaled to 47.6.
-    expect(find.text('25.1'), findsOneWidget);
-    expect(find.text('47.6'), findsOneWidget);
-    expect(find.text('28.7'), findsNothing); // playoff row hidden initially
-
-    await tester.tap(find.text('Playoffs'));
-    await tester.pumpAndSettle();
-    expect(find.text('28.7'), findsOneWidget);
-    expect(find.text('25.1'), findsNothing);
+    expect(find.text('19.4'), findsWidgets); // 1996-97 PTS in the hero
+    expect(find.text('45.1%'), findsOneWidget); // and its shooting
   });
 }

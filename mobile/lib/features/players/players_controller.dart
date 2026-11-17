@@ -9,6 +9,9 @@ class PlayersState {
   final String? team;
   final String? position;
 
+  /// Season label filter, e.g. "2015-16".
+  final String? season;
+
   final List<PlayerListItem> items;
   final int total;
   final int page;
@@ -28,6 +31,7 @@ class PlayersState {
     this.query = '',
     this.team,
     this.position,
+    this.season,
     this.items = const [],
     this.total = 0,
     this.page = 0,
@@ -41,12 +45,13 @@ class PlayersState {
 
   bool get isEmpty => !loading && error == null && items.isEmpty;
   bool get hasActiveFilters =>
-      query.isNotEmpty || team != null || position != null;
+      query.isNotEmpty || team != null || position != null || season != null;
 
   PlayersState copyWith({
     String? query,
     Object? team = _sentinel,
     Object? position = _sentinel,
+    Object? season = _sentinel,
     List<PlayerListItem>? items,
     int? total,
     int? page,
@@ -63,6 +68,7 @@ class PlayersState {
       position: identical(position, _sentinel)
           ? this.position
           : position as String?,
+      season: identical(season, _sentinel) ? this.season : season as String?,
       items: items ?? this.items,
       total: total ?? this.total,
       page: page ?? this.page,
@@ -104,8 +110,13 @@ class PlayersController extends StateNotifier<PlayersState> {
     await _loadFirstPage();
   }
 
+  Future<void> setSeason(String? season) async {
+    state = state.copyWith(season: season);
+    await _loadFirstPage();
+  }
+
   Future<void> clearFilters() async {
-    state = state.copyWith(query: '', team: null, position: null);
+    state = state.copyWith(query: '', team: null, position: null, season: null);
     await _loadFirstPage();
   }
 
@@ -115,12 +126,14 @@ class PlayersController extends StateNotifier<PlayersState> {
     final q = state.query;
     final team = state.team;
     final position = state.position;
+    final season = state.season;
     state = state.copyWith(loading: true, error: null);
     try {
       final result = await _api.fetchPlayers(
         q: q,
         team: team,
         position: position,
+        season: season,
         page: 1,
         pageSize: _pageSize,
       );
@@ -130,6 +143,7 @@ class PlayersController extends StateNotifier<PlayersState> {
           q: q,
           team: team,
           position: position,
+          season: season,
           page: 1,
           pageSize: _pageSize,
         ),
@@ -157,6 +171,7 @@ class PlayersController extends StateNotifier<PlayersState> {
         q: state.query,
         team: state.team,
         position: state.position,
+        season: state.season,
         page: state.page + 1,
         pageSize: _pageSize,
       );

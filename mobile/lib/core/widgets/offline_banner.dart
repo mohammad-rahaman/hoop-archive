@@ -1,12 +1,13 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../connectivity.dart';
+import '../theme.dart';
 import '../time_ago.dart';
 
-/// A slim, full-width strip shown while the device is offline. Collapses to
-/// nothing when connectivity is present (or still unknown), so it's safe to
-/// place at the top of any screen body.
+/// A slim strip shown while the device is offline. Collapses to nothing when
+/// connectivity is present (or still unknown), so it's safe to place at the
+/// top of any screen body.
 class OfflineBanner extends ConsumerWidget {
   const OfflineBanner({super.key});
 
@@ -15,31 +16,26 @@ class OfflineBanner extends ConsumerWidget {
     final offline = ref.watch(isOfflineProvider);
     if (!offline) return const SizedBox.shrink();
 
-    final t = Theme.of(context);
-    return Material(
-      color: t.colorScheme.tertiaryContainer,
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            children: [
-              Icon(
-                Icons.cloud_off_rounded,
-                size: 16,
-                color: t.colorScheme.onTertiaryContainer,
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: const BoxDecoration(
+          color: Hue.panel,
+          border: Border(bottom: BorderSide(color: Hue.hairline)),
+        ),
+        child: Row(
+          children: [
+            const Icon(CupertinoIcons.wifi_slash, size: 16, color: Hue.volt),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                "You're offline. Showing saved data where available.",
+                style: Txt.caption.copyWith(color: Hue.textHi),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  "You're offline — showing saved data where available.",
-                  style: t.textTheme.labelMedium?.copyWith(
-                    color: t.colorScheme.onTertiaryContainer,
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -54,28 +50,21 @@ class CachedCopyNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: t.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Hue.hairlineStrong),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.history_rounded,
-            size: 15,
-            color: t.colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: 6),
+          const Icon(CupertinoIcons.clock, size: 14, color: Hue.textMid),
+          const SizedBox(width: 7),
           Flexible(
             child: Text(
               'Saved copy · updated ${relativeSince(cachedAt)}',
-              style: t.textTheme.labelMedium?.copyWith(
-                color: t.colorScheme.onSurfaceVariant,
-              ),
+              style: Txt.caption.copyWith(fontSize: 12.5),
             ),
           ),
         ],

@@ -68,19 +68,19 @@ class PlayerListItem {
   });
 
   factory PlayerListItem.fromJson(Map<String, dynamic> json) => PlayerListItem(
-        id: json['id'] as int,
-        fullName: json['full_name'] as String,
-        position: json['position'] as String?,
-        latestTeam: json['latest_team'] as String?,
-        teams: ((json['teams'] as List?) ?? const [])
-            .map((e) => e as String)
-            .toList(),
-        seasonCount: (json['season_count'] ?? 0) as int,
-        firstYear: json['first_year'] as int?,
-        lastYear: json['last_year'] as int?,
-        latestSeason: json['latest_season'] as String?,
-        imageUrl: json['image_url'] as String?,
-      );
+    id: json['id'] as int,
+    fullName: json['full_name'] as String,
+    position: json['position'] as String?,
+    latestTeam: json['latest_team'] as String?,
+    teams: ((json['teams'] as List?) ?? const [])
+        .map((e) => e as String)
+        .toList(),
+    seasonCount: (json['season_count'] ?? 0) as int,
+    firstYear: json['first_year'] as int?,
+    lastYear: json['last_year'] as int?,
+    latestSeason: json['latest_season'] as String?,
+    imageUrl: json['image_url'] as String?,
+  );
 
   String get careerSpan {
     if (firstYear == null || lastYear == null) return '—';
@@ -89,8 +89,11 @@ class PlayerListItem {
   }
 
   String get initials {
-    final parts =
-        fullName.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    final parts = fullName
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
     if (parts.isEmpty) return '?';
     if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
     return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
@@ -114,14 +117,14 @@ class PlayersPage {
   });
 
   factory PlayersPage.fromJson(Map<String, dynamic> json) => PlayersPage(
-        items: ((json['items'] as List?) ?? const [])
-            .map((e) => PlayerListItem.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        total: (json['total'] ?? 0) as int,
-        page: (json['page'] ?? 1) as int,
-        pageSize: (json['page_size'] ?? 0) as int,
-        hasMore: (json['has_more'] ?? false) as bool,
-      );
+    items: ((json['items'] as List?) ?? const [])
+        .map((e) => PlayerListItem.fromJson(e as Map<String, dynamic>))
+        .toList(),
+    total: (json['total'] ?? 0) as int,
+    page: (json['page'] ?? 1) as int,
+    pageSize: (json['page_size'] ?? 0) as int,
+    hasMore: (json['has_more'] ?? false) as bool,
+  );
 }
 
 class SeasonStatRow {
@@ -170,25 +173,25 @@ class SeasonStatRow {
   static double? _d(dynamic v) => v == null ? null : (v as num).toDouble();
 
   factory SeasonStatRow.fromJson(Map<String, dynamic> json) => SeasonStatRow(
-        season: json['season'] as String,
-        yearStart: json['year_start'] as int,
-        seasonType: json['season_type'] as String,
-        team: json['team'] as String,
-        statMode: json['stat_mode'] as String,
-        gp: json['gp'] as int?,
-        min: _d(json['min']),
-        pts: _d(json['pts']),
-        reb: _d(json['reb']),
-        ast: _d(json['ast']),
-        stl: _d(json['stl']),
-        blk: _d(json['blk']),
-        tov: _d(json['tov']),
-        fgPct: _d(json['fg_pct']),
-        fg3Pct: _d(json['fg3_pct']),
-        ftPct: _d(json['ft_pct']),
-        per: _d(json['per']),
-        tsPct: _d(json['ts_pct']),
-      );
+    season: json['season'] as String,
+    yearStart: json['year_start'] as int,
+    seasonType: json['season_type'] as String,
+    team: json['team'] as String,
+    statMode: json['stat_mode'] as String,
+    gp: json['gp'] as int?,
+    min: _d(json['min']),
+    pts: _d(json['pts']),
+    reb: _d(json['reb']),
+    ast: _d(json['ast']),
+    stl: _d(json['stl']),
+    blk: _d(json['blk']),
+    tov: _d(json['tov']),
+    fgPct: _d(json['fg_pct']),
+    fg3Pct: _d(json['fg3_pct']),
+    ftPct: _d(json['ft_pct']),
+    per: _d(json['per']),
+    tsPct: _d(json['ts_pct']),
+  );
 }
 
 class PlayerDetail {
@@ -219,22 +222,22 @@ class PlayerDetail {
   });
 
   factory PlayerDetail.fromJson(Map<String, dynamic> json) => PlayerDetail(
-        id: json['id'] as int,
-        fullName: json['full_name'] as String,
-        position: json['position'] as String?,
-        jerseyNumber: json['jersey_number'] as String?,
-        teams: ((json['teams'] as List?) ?? const [])
-            .map((e) => e as String)
-            .toList(),
-        firstYear: json['first_year'] as int?,
-        lastYear: json['last_year'] as int?,
-        seasonCount: (json['season_count'] ?? 0) as int,
-        hasPlayoffs: (json['has_playoffs'] ?? false) as bool,
-        imageUrl: json['image_url'] as String?,
-        seasons: ((json['seasons'] as List?) ?? const [])
-            .map((e) => SeasonStatRow.fromJson(e as Map<String, dynamic>))
-            .toList(),
-      );
+    id: json['id'] as int,
+    fullName: json['full_name'] as String,
+    position: json['position'] as String?,
+    jerseyNumber: json['jersey_number'] as String?,
+    teams: ((json['teams'] as List?) ?? const [])
+        .map((e) => e as String)
+        .toList(),
+    firstYear: json['first_year'] as int?,
+    lastYear: json['last_year'] as int?,
+    seasonCount: (json['season_count'] ?? 0) as int,
+    hasPlayoffs: (json['has_playoffs'] ?? false) as bool,
+    imageUrl: json['image_url'] as String?,
+    seasons: ((json['seasons'] as List?) ?? const [])
+        .map((e) => SeasonStatRow.fromJson(e as Map<String, dynamic>))
+        .toList(),
+  );
 
   String get careerSpan {
     if (firstYear == null || lastYear == null) return '—';
@@ -243,8 +246,11 @@ class PlayerDetail {
   }
 
   String get initials {
-    final parts =
-        fullName.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    final parts = fullName
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
     if (parts.isEmpty) return '?';
     if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
     return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
@@ -256,18 +262,28 @@ class FilterOptions {
   final List<String> teams;
   final List<String> positions;
 
-  const FilterOptions({required this.teams, required this.positions});
+  /// Season labels with recorded stats, newest first (e.g. "2020-21").
+  final List<String> seasons;
+
+  const FilterOptions({
+    required this.teams,
+    required this.positions,
+    this.seasons = const [],
+  });
 
   static const empty = FilterOptions(teams: [], positions: []);
 
   factory FilterOptions.fromJson(Map<String, dynamic> json) => FilterOptions(
-        teams: ((json['teams'] as List?) ?? const [])
-            .map((e) => e as String)
-            .toList(),
-        positions: ((json['positions'] as List?) ?? const [])
-            .map((e) => e as String)
-            .toList(),
-      );
+    teams: ((json['teams'] as List?) ?? const [])
+        .map((e) => e as String)
+        .toList(),
+    positions: ((json['positions'] as List?) ?? const [])
+        .map((e) => e as String)
+        .toList(),
+    seasons: ((json['seasons'] as List?) ?? const [])
+        .map((e) => e as String)
+        .toList(),
+  );
 }
 
 class ComparisonPlayer {
@@ -280,6 +296,12 @@ class ComparisonPlayer {
   final int seasonCount;
   final String? imageUrl;
 
+  /// Set when this side compares one season instead of the career.
+  final String? season;
+
+  /// Team for that season ("TOT" when split across teams).
+  final String? seasonTeam;
+
   const ComparisonPlayer({
     required this.id,
     required this.fullName,
@@ -289,6 +311,8 @@ class ComparisonPlayer {
     required this.lastYear,
     required this.seasonCount,
     this.imageUrl,
+    this.season,
+    this.seasonTeam,
   });
 
   factory ComparisonPlayer.fromJson(Map<String, dynamic> json) =>
@@ -303,6 +327,8 @@ class ComparisonPlayer {
         lastYear: json['last_year'] as int?,
         seasonCount: (json['season_count'] ?? 0) as int,
         imageUrl: json['image_url'] as String?,
+        season: json['season'] as String?,
+        seasonTeam: json['season_team'] as String?,
       );
 
   String get careerSpan {
@@ -312,8 +338,11 @@ class ComparisonPlayer {
   }
 
   String get initials {
-    final parts =
-        fullName.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    final parts = fullName
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
     if (parts.isEmpty) return '?';
     if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
     return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
@@ -420,12 +449,12 @@ class SyncInfo {
   });
 
   factory SyncInfo.fromJson(Map<String, dynamic> json) => SyncInfo(
-        provider: (json['provider'] ?? 'unknown') as String,
-        sourceLabel: json['source_label'] as String?,
-        finishedAt: json['finished_at'] as String?,
-        rowsIngested: (json['rows_ingested'] ?? 0) as int,
-        rowsUpdated: (json['rows_updated'] ?? 0) as int,
-      );
+    provider: (json['provider'] ?? 'unknown') as String,
+    sourceLabel: json['source_label'] as String?,
+    finishedAt: json['finished_at'] as String?,
+    rowsIngested: (json['rows_ingested'] ?? 0) as int,
+    rowsUpdated: (json['rows_updated'] ?? 0) as int,
+  );
 
   /// Human label for the provider that last populated data.
   String get providerLabel {
