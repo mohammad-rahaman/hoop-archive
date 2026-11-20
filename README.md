@@ -232,6 +232,41 @@ reverse-proxy micro-cache.
 
 ---
 
+## Deploy (Render, free tier)
+
+A [`render.yaml`](render.yaml) blueprint provisions the whole backend — a web
+service plus a managed Postgres — in one step, so a friend can use the app from
+anywhere. Historical data only; no API key is deployed.
+
+1. **Push to GitHub**, then in the [Render dashboard](https://dashboard.render.com)
+   choose **New → Blueprint** and select this repo. Render reads `render.yaml`
+   and creates `hoop-archive-api` + `hoop-archive-db`.
+2. **Load the data once, from your laptop.** The Kaggle CSV is git-ignored and
+   must stay off the public repo, so ingest it directly into the hosted database
+   using its **External Connection String** (Render dashboard → the database →
+   *Connections*):
+   ```bash
+   cd backend
+   DATABASE_URL='<external-connection-string>' \
+     python3 -m app.etl.ingest --csv ../cleaned_data.csv --year-is-end
+   ```
+   The ingester is idempotent, so it's safe to re-run.
+3. **Point the app at the live URL** and build an APK to hand to a friend:
+   ```bash
+   cd mobile
+   flutter build apk --release --dart-define=API_BASE_URL=https://hoop-archive-api.onrender.com
+   ```
+   Share `build/app/outputs/flutter-apk/app-release.apk`.
+
+Notes: the free web service sleeps after ~15 min idle (first request wakes it in
+~50 s), and free Postgres expires ~30 days after creation. Migrations run in the
+start command (`alembic upgrade head`) because Render's `preDeployCommand` needs
+a paid plan. To enable live current-season sync later, add `SPORTRADAR_API_KEY`
+(and the sync vars) in the service's **Environment** tab — never in the repo or
+the Flutter client.
+
+---
+
 ## Mobile — setup & run
 
 Requirements: Flutter 3.24+.

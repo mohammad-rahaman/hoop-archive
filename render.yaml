@@ -1,0 +1,57 @@
+# Render Blueprint — one free web service + one free Postgres for Hoop Archive.
+#
+# Deploy: push to GitHub, then in the Render dashboard choose
+# New > Blueprint and point it at this repo. Render reads this file and
+# provisions both services.
+#
+# After the first deploy, load the data ONCE from your laptop against the
+# database's EXTERNAL connection string (the CSV is git-ignored and must stay
+# off the public repo):
+#
+#   cd backend
+#   DATABASE_URL='<external-connection-string>' \
+#     python3 -m app.etl.ingest --csv ../cleaned_data.csv --year-is-end
+#
+# Notes:
+#   * Render's free Postgres expires ~30 days after creation — fine for a demo.
+#   * Migrations run inside startCommand because preDeployCommand needs a paid
+#     compute plan.
+#   * SPORTRADAR_API_KEY is deliberately absent: the demo serves historical data
+#     only, and the key must never live in the repo. Add it later in the Render
+#     dashboard (service > Environment) if you turn on live sync.
+
+databases:
+  - name: hoop-archive-db
+    databaseName: hoop_archive
+    user: hoop_archive
+    plan: free
+
+services:
+  - type: web
+    name: hoop-archive-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    healthCheckPath: /health
+    buildCommand: pip install -r requirements.txt
+    startCommand: alembic upgrade head && gunicorn app.main:app -c gunicorn_conf.py -b 0.0.0.0:$PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: hoop-archive-db
+          property: connectionString
+      # Free instance is small (512 MB, shared CPU). Pin the worker count so the
+      # CPU-derived default in gunicorn_conf.py can't over-fork and run out of
+      # memory on boot.
+      - key: WEB_CONCURRENCY
+        value: 2
+      # 2 workers x (pool 5 + overflow 5) = 20 connections, well under the free
+      # Postgres connection limit.
+      - key: DB_POOL_SIZE
+        value: 5
+      - key: DB_MAX_OVERFLOW
+        value: 5

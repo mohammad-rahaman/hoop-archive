@@ -5,6 +5,7 @@ through any API response or to the Flutter client.
 """
 from typing import Optional
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,6 +21,17 @@ class Settings(BaseSettings):
     environment: str = "development"
 
     database_url: str = "postgresql+psycopg2:///hoop_archive"
+
+    @field_validator("database_url")
+    @classmethod
+    def _normalize_database_url(cls, v: str) -> str:
+        # Managed Postgres providers (Render, Heroku, Railway, ...) hand out a
+        # URL with the bare ``postgres://`` scheme, which SQLAlchemy 2.x no
+        # longer recognizes as a dialect. Pin it to psycopg2 so the very same
+        # DATABASE_URL works unchanged locally and on the host.
+        if v.startswith("postgres://"):
+            return "postgresql+psycopg2://" + v[len("postgres://") :]
+        return v
 
     # Connection pool, sized PER WORKER PROCESS. Under a multi-worker server the
     # total connections opened against Postgres is
